@@ -1,0 +1,4 @@
+agent: codex
+profile: jarvis
+destination: ~/.codex/agents.md
+mode: prepend

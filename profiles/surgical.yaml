@@ -1,0 +1,6 @@
+name: surgical
+description: Minimal — task-focused, sin contexto personal ni env. Para invocaciones acotadas (CI, repos ajenos, código sensible).
+include:
+  - rules/commits
+  - rules/tools
+  - rules/safety

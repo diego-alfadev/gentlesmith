@@ -1,0 +1,13 @@
+name: jarvis
+description: Full stack — system-aware, opinionated, mentor mode. Persona + operative rules + system context. Does NOT include engram protocol or SDD orchestrator (gentle-ai territory).
+include:
+  - persona/jarvis
+  - persona/karpathy-guidelines
+  - rules/safety
+  - rules/workflow
+  - rules/commits
+  - rules/tools
+  - env/system
+  - env/toolchain
+  - env/deployment
+  - env/secrets

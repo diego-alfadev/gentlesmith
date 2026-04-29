@@ -1,0 +1,8 @@
+# Antigravity and Gemini CLI share ~/.gemini/GEMINI.md
+# Uninstall persona from both before applying:
+#   gentle-ai uninstall --agent antigravity --component persona --yes
+#   gentle-ai uninstall --agent gemini-cli --component persona --yes
+agent: antigravity
+profile: jarvis
+destination: ~/.gemini/GEMINI.md
+mode: prepend

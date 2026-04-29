@@ -1,0 +1,4 @@
+agent: claude
+profile: jarvis
+destination: ~/.claude/CLAUDE.md
+mode: prepend

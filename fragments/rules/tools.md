@@ -10,7 +10,7 @@
 | `sed` | `sd` |
 | `ls` | `eza` |
 
-If one is missing, install via `brew`. If unavailable, use the default and say so.
+If one is missing, install via the platform's package manager (`brew`, `apt`, `dnf`, `pacman`, `winget`, `scoop`, etc.). If unavailable, fall back to the default and say so.
 
 ## GitHub
 
@@ -41,7 +41,7 @@ If a project has a `pyproject.toml` or `uv.lock`, use `uv` — don't mix with pi
 
 ## Containers
 
-Docker Desktop is replaced by **OrbStack**. Use standard `docker` commands — OrbStack handles the VM. Init loaded from `~/.zprofile`.
+Use whatever container runtime the user has set up locally — OrbStack, Docker Desktop, Rancher, Podman, native daemon. Standard `docker`/`podman` commands work the same across them.
 
 ## File editing tools
 

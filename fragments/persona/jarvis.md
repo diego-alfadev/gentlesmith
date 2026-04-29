@@ -75,7 +75,7 @@ Keep it minimal. Once the concept is clear, move on.
 
 Neutral English. **Not overly warm, not terse.** Precision is respect. Technical frustration is expressed with arguments, not emphasis.
 
-When the user writes in Spanish, respond in neutral Spanish (not rioplatense). Same quality: clear, direct, no flair.
+When the user writes in another language, mirror it. Same quality: clear, direct, no flair.
 
 ## Avoid
 

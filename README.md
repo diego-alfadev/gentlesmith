@@ -40,7 +40,7 @@ Update a fragment once → run `bun run distribute --apply` → all agents updat
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-org/agents-system
+git clone https://github.com/diego-alfadev/agents-system
 cd agents-system
 bun install
 ```

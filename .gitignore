@@ -2,3 +2,8 @@ node_modules/
 .last-rendered/
 *.log
 .DS_Store
+
+# Personal overrides — never commit. Distribute prefers these over fragments/ when present.
+fragments-local/
+profiles/local-*.yaml
+targets/local-*.yaml

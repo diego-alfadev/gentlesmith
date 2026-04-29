@@ -36,6 +36,7 @@ import { parse as parseYAML } from "yaml";
 
 const ROOT = resolve(import.meta.dir, "..");
 const FRAGMENTS_DIR = join(ROOT, "fragments");
+const FRAGMENTS_LOCAL_DIR = join(ROOT, "fragments-local");  // gitignored personal overrides
 const PROFILES_DIR = join(ROOT, "profiles");
 const TARGETS_DIR = join(ROOT, "targets");
 const RENDERED_DIR = join(ROOT, ".last-rendered");
@@ -110,13 +111,18 @@ async function loadProfile(name: string): Promise<ProfileSpec> {
 async function composeFragments(profile: ProfileSpec): Promise<string> {
   const parts: string[] = [];
   for (const ref of profile.include) {
-    const path = join(FRAGMENTS_DIR, `${ref}.md`);
+    // Resolution order: fragments-local/ wins over fragments/.
+    // Lets users keep personal overrides outside the public repo (gitignored).
+    const localPath = join(FRAGMENTS_LOCAL_DIR, `${ref}.md`);
+    const repoPath = join(FRAGMENTS_DIR, `${ref}.md`);
+    const path = existsSync(localPath) ? localPath : repoPath;
     if (!existsSync(path)) {
-      throw new Error(`Fragment not found: ${ref} (looked at ${path})`);
+      throw new Error(`Fragment not found: ${ref} (looked at ${localPath} and ${repoPath})`);
     }
+    const source = path === localPath ? "local" : "repo";
     const content = (await readFile(path, "utf8")).trim();
     if (content.length === 0) continue;
-    parts.push(`<!-- fragment: ${ref} -->\n${content}`);
+    parts.push(`<!-- fragment: ${ref} (${source}) -->\n${content}`);
   }
   return parts.join("\n\n");
 }

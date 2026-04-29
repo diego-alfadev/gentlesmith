@@ -1,19 +1,31 @@
 #!/usr/bin/env bun
 /**
- * agents-system distribute — v1
+ * gentlesmith — forge a custom AI agent
  *
- * Compose fragments → profiles → render to target files via managed-block.
- * Dry-run by default. Pass --apply to actually write.
+ * Compose fragments → profiles → render into agent system-prompt files via
+ * a managed marker block. Dry-run by default. Pass --apply to write.
  *
  * Modes (set in targets/*.yaml):
- *   managed-block  — appends block at end of existing file (default)
- *   prepend        — puts block at top; gentle-ai content stays below
+ *   managed-block  — appends block at end of existing file
+ *   prepend        — puts block at top; gentle-ai content (if any) stays below
+ *
+ * Marker namespace:
+ *   <!-- gentle-ai-overlay:gentlesmith -->
+ *     ...rendered profile content...
+ *   <!-- /gentle-ai-overlay:gentlesmith -->
+ *
+ * Coexistence: gentle-ai's own markers (<!-- gentle-ai:* -->) and ours
+ * (<!-- gentle-ai-overlay:gentlesmith -->) live in the same file without
+ * collision. gentle-ai's sync preserves anything outside its namespace.
  *
  * Usage:
  *   bun run distribute                    # dry-run, all targets
  *   bun run distribute --target claude    # dry-run, only claude
  *   bun run distribute --apply            # apply all
  *   bun run distribute --apply --target claude
+ *
+ *   # Or via npx (after publish):
+ *   npx gentlesmith --apply
  */
 
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
@@ -28,11 +40,20 @@ const PROFILES_DIR = join(ROOT, "profiles");
 const TARGETS_DIR = join(ROOT, "targets");
 const RENDERED_DIR = join(ROOT, ".last-rendered");
 
-const BLOCK_VERSION = "v1";
-const BLOCK_START = `<!-- agents-system:start ${BLOCK_VERSION} -->`;
-const BLOCK_END = `<!-- agents-system:end -->`;
+const BLOCK_NAME = "gentlesmith";
+const BLOCK_START = `<!-- gentle-ai-overlay:${BLOCK_NAME} -->`;
+const BLOCK_END = `<!-- /gentle-ai-overlay:${BLOCK_NAME} -->`;
+
+// BLOCK_RE matches the current marker AND legacy markers from earlier versions
+// of this tool, so a single --apply migrates files seamlessly. If multiple
+// blocks somehow exist, only the first is consumed; rerun --apply to clean up.
 const BLOCK_RE = new RegExp(
-  `<!-- agents-system:start [^>]*-->[\\s\\S]*?<!-- agents-system:end -->`,
+  [
+    // Current: <!-- gentle-ai-overlay:gentlesmith --> ... <!-- /gentle-ai-overlay:gentlesmith -->
+    `<!-- gentle-ai-overlay:${BLOCK_NAME} -->[\\s\\S]*?<!-- /gentle-ai-overlay:${BLOCK_NAME} -->`,
+    // Legacy v0 (agents-system pre-rebrand): <!-- agents-system:start vX --> ... <!-- agents-system:end -->
+    `<!-- agents-system:start [^>]*-->[\\s\\S]*?<!-- agents-system:end -->`,
+  ].join("|"),
   "m",
 );
 
@@ -211,7 +232,7 @@ async function main() {
   const targetIdx = args.indexOf("--target");
   const filter = targetIdx >= 0 ? args[targetIdx + 1] : undefined;
 
-  console.log(`agents-system distribute — ${apply ? "APPLY" : "DRY-RUN"}${filter ? ` (target=${filter})` : ""}`);
+  console.log(`gentlesmith — ${apply ? "APPLY" : "DRY-RUN"}${filter ? ` (target=${filter})` : ""}`);
 
   const targets = await loadAllTargets(filter);
   if (targets.length === 0) {

@@ -1,4 +1,4 @@
-# SETUP — Portable agents-system
+# SETUP — Portable gentlesmith
 
 Cross-platform setup guide for **macOS / Linux / Windows**.
 
@@ -15,8 +15,8 @@ Cross-platform setup guide for **macOS / Linux / Windows**.
 ## Step 1 — Clone & install
 
 ```bash
-git clone <this-repo-url> agents-system
-cd agents-system
+git clone <this-repo-url> gentlesmith
+cd gentlesmith
 bun install
 ```
 

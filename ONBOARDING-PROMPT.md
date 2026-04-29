@@ -1,4 +1,4 @@
-# Onboarding Prompt — agents-system
+# Onboarding Prompt — gentlesmith
 
 Paste the block below into your agent to kick off your personal setup.
 The agent will interview you, fill your fragments, and apply your configuration.
@@ -6,7 +6,7 @@ The agent will interview you, fill your fragments, and apply your configuration.
 ---
 
 ```
-You are going to help me set up agents-system — a personal behavior layer for AI agents.
+You are going to help me set up gentlesmith — a personal behavior layer for AI agents.
 
 First, read these files in the repo to understand the structure:
 - README.md
@@ -59,7 +59,7 @@ Once your agent has applied the configuration, verify it worked:
 
 ```bash
 # See the block structure
-grep -n "agents-system\|fragment:" ~/.claude/CLAUDE.md   # or your agent's config file
+grep -n "gentle-ai-overlay:gentlesmith\|fragment:" ~/.claude/CLAUDE.md   # or your agent's config file
 
 # Re-run anytime you update fragments
 bun run distribute --apply

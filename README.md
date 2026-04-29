@@ -1,111 +1,131 @@
-# agents-system
+# gentlesmith
 
-> A personal behavior layer for AI coding agents. One source of truth — persona, rules, and environment context — distributed to every agent you use via composition.
+> Forge a custom AI agent: persona, rules, environment, and skill bundles tailored to you and your system. **Standalone or as a [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) overlay.**
 
-**Works with or without [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai).** If you use gentle-ai, this layer adds what it intentionally leaves out: your persona, your rules, your environment.
+> ⚠️ **Alpha (v0.1.0-alpha).** API may shift. Use it, file issues, suggest things. The architecture is settling.
 
-Cross-platform: macOS · Linux · Windows
-
----
-
-## What it does
-
-Instead of copy-pasting your persona into every agent config separately, you write it once as composable **fragments** and a script distributes them everywhere:
-
-```
-fragments/         ← atomic pieces (one concern each)
-  persona/         ← who the agent is + thinking principles
-  rules/           ← commits, tools, safety, workflow
-  env/             ← your system context (toolchain, deployment, etc.)
-
-profiles/          ← recipes: which fragments, in which order
-  jarvis.yaml      ← full profile: persona + rules + env
-  surgical.yaml    ← minimal: rules only, no persona, no env
-
-targets/           ← where each profile gets rendered
-  claude.yaml      ← → ~/.claude/CLAUDE.md
-  antigravity.yaml ← → ~/.gemini/GEMINI.md
-  codex.yaml       ← → ~/.codex/agents.md
-  ...
-
-bin/distribute.ts  ← renders fragments → managed-block in each target
-```
-
-Update a fragment once → run `bun run distribute --apply` → all agents updated.
+Cross-platform: macOS · Linux · Windows.
 
 ---
 
-## Quick start
+## What it is
 
-### 1. Clone and install
+A small CLI that **composes markdown fragments** (persona, rules, env, skill manifests) and writes them into your AI agent's system-prompt file inside a managed marker block.
+
+The interesting part isn't the catalog of fragments — it's how they compose. You define **profiles** (recipes) and the tool renders them across **all your agents** (Claude Code, Codex, Antigravity/Gemini, OpenCode, Cursor, etc.) with one command.
+
+```
+fragments/   ← atomic markdown pieces (persona, rules, env)
+profiles/    ← recipes (which fragments, in which order)
+targets/     ← where each profile gets rendered (one yaml per agent)
+bin/         ← the renderer
+```
+
+Update a fragment once → run `gentlesmith --apply` → all agents updated.
+
+---
+
+## Why "gentlesmith"
+
+It plays nice with [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) but doesn't depend on it.
+
+- **Using gentle-ai?** gentlesmith writes inside its own marker namespace (`<!-- gentle-ai-overlay:gentlesmith -->`). gentle-ai's `sync` leaves it alone. The two coexist in the same file.
+- **Not using gentle-ai?** gentlesmith works standalone. It's just a markdown composer that writes to your agent's config file.
+
+---
+
+## Quick start (alpha)
 
 ```bash
-git clone https://github.com/diego-alfadev/agents-system
-cd agents-system
+# Try without installing
+npx -y github:diego-alfadev/gentlesmith
+
+# Or clone for hacking
+git clone https://github.com/diego-alfadev/gentlesmith
+cd gentlesmith
 bun install
+bun run distribute            # dry-run: see what would change
+bun run distribute --apply    # write to all configured agents
 ```
 
-### 2. Read the setup guide
+For dialogic onboarding (let an agent interview you and write your fragments): see [ONBOARDING-PROMPT.md](ONBOARDING-PROMPT.md).
 
-→ [SETUP.md](SETUP.md) — environment files, cross-platform config, step-by-step.
-
-### 3. Set up dialogically (recommended for first time)
-
-Paste the prompt in [ONBOARDING-PROMPT.md](ONBOARDING-PROMPT.md) into your agent.
-It will interview you, write your fragments, and apply your config.
-
-### 4. Or do it manually
-
-```bash
-# Edit fragments to match your preferences
-nano fragments/persona/jarvis.md
-
-# Dry-run: see what would change
-bun run distribute
-
-# Apply to all agents
-bun run distribute --apply
-
-# Apply to one agent only
-bun run distribute --apply --target claude
-```
+For environment setup details (`~/.secrets.agents` pattern, etc.): see [SETUP.md](SETUP.md).
 
 ---
 
-## Supported agents
+## Skill levels (where things live)
 
-Any agent that reads a Markdown system prompt file. Pre-configured targets:
+A profile can declare four levels of "where the skill/workflow ends up":
 
-| Agent | Config file | Target |
+| Level | Where | Cost in context | Example |
+|---|---|---|---|
+| 1. **Forged** | Full text inside the overlay block | Always loaded | Karpathy guidelines, safety rules, persona |
+| 2. **In-block reference** | Mentioned by trigger inside the block | Just the reference | "Run `/judgment-day` when reviewing PRs" |
+| 3. **Manifest** | Declared in a YAML frontmatter or footer block | Minimal metadata | `skills: [react-19, a11y-review]` |
+| 4. **Ambient** | Not in our block at all — agent discovers via skill registry | Zero | Skills installed under `~/.claude/skills/` |
+
+V0.1 implements only **level 1 (forged)**. Levels 2–4 are part of the schema but not yet rendered.
+
+---
+
+## Coexistence with gentle-ai
+
+The two write to the same files (e.g. `~/.claude/CLAUDE.md`) but in **separate namespaces**:
+
+```md
+<!-- gentle-ai-overlay:gentlesmith -->
+... your forged content ...
+<!-- /gentle-ai-overlay:gentlesmith -->
+
+<!-- gentle-ai:persona -->
+... gentle-ai's gentleman/neutral persona ...
+<!-- /gentle-ai:persona -->
+
+<!-- gentle-ai:sdd -->
+... gentle-ai's SDD orchestrator ...
+<!-- /gentle-ai:sdd -->
+```
+
+`gentle-ai sync` is idempotent and namespace-aware — it doesn't touch our block. We don't touch theirs.
+
+If you're starting from gentle-ai's default Gentleman persona and want to replace it with your own, run:
+
+```bash
+gentle-ai uninstall --agent claude-code --component persona --yes
+```
+
+Then apply gentlesmith. Or use `--persona custom` when installing gentle-ai (skips the persona inject from the start).
+
+---
+
+## Profiles included
+
+| Profile | What it composes |
+|---|---|
+| `jarvis` | Example "full stack" persona — identity + Karpathy thinking guidelines + safety/workflow/commits/tools rules + system/toolchain/deployment env |
+| `surgical` | Minimal — rules only, no persona, no env |
+
+These are **examples**. The expectation is that you write your own (or fork mine and edit). New community-contributed profiles are welcome via PR.
+
+---
+
+## Targets included
+
+| Agent | Config file | Target file |
 |---|---|---|
 | Claude Code | `~/.claude/CLAUDE.md` | `targets/claude.yaml` |
 | Antigravity / Gemini CLI | `~/.gemini/GEMINI.md` | `targets/antigravity.yaml` |
 | Codex | `~/.codex/agents.md` | `targets/codex.yaml` |
-| OpenCode | `~/.config/opencode/AGENTS.md` | add `targets/opencode.yaml` |
-| Kimi Code | `~/.kimi/KIMI.md` | add `targets/kimi.yaml` |
-| Any other | wherever it reads Markdown | add a target yaml |
 
-To add a new agent, create `targets/myagent.yaml`:
+To add another agent, drop a `targets/<name>.yaml`:
 
 ```yaml
 agent: myagent
-profile: jarvis       # or surgical, or your own profile
+profile: jarvis
 destination: ~/.myagent/AGENTS.md
-mode: prepend         # block goes first; existing content stays below
+mode: prepend
 ```
-
-Then `bun run distribute --apply --target myagent`.
-
----
-
-## Profiles
-
-| Profile | Includes | Use case |
-|---|---|---|
-| `jarvis` | persona + karpathy guidelines + rules + env | Your daily driver |
-| `surgical` | commits + tools + safety only | CI, sensitive repos, quick tasks |
-
-Create your own profile by listing any combination of fragments in a new `profiles/mypersona.yaml`.
 
 ---
 
@@ -113,58 +133,33 @@ Create your own profile by listing any combination of fragments in a new `profil
 
 | Mode | Behavior |
 |---|---|
-| `prepend` | Block goes at the top. Agent reads persona before anything else. |
-| `managed-block` | Block appended at end. Preserves all existing content above. |
+| `prepend` | Block goes at the top. Agent reads our content first; everything below is preserved. |
+| `managed-block` | Block appended/replaced at the end. Existing content above stays untouched. |
 
-**Using gentle-ai?** Use `prepend`. gentle-ai's SDD, Engram, and MCP content stays below — no conflict.
-**Not using gentle-ai?** Either works. `prepend` recommended.
-
----
-
-## Coexistence with gentle-ai
-
-gentle-ai's `sync` command excludes persona by default. This means:
-
-- gentle-ai manages: SDD orchestrator, Engram protocol, MCP servers, skills, model routing.
-- agents-system manages: persona, rules, environment context.
-
-No conflicts. To remove the default Gentleman persona first:
-
-```bash
-gentle-ai uninstall --agent claude-code --component persona --yes
-```
-
-Then apply agents-system normally.
-
----
-
-## Fragment reference
-
-| Fragment | What it defines |
-|---|---|
-| `persona/jarvis` | Identity, mode, teaching approach, tone, closing style |
-| `persona/karpathy-guidelines` | Foundations-first, verify over assert, debug mindset |
-| `rules/safety` | Ask-then-wait, reversible vs irreversible, no auto-build |
-| `rules/workflow` | Push back, alternatives with tradeoffs, no premature abstractions |
-| `rules/commits` | Conventional commits, no AI attribution, atomic, explicit staging |
-| `rules/tools` | CLI preferences (bat/rg/fd/sd/eza), gh CLI, bun, uv |
-| `env/system` | OS, shell, config file locations |
-| `env/toolchain` | fnm/Bun, uv/Python, OrbStack/Docker |
-| `env/deployment` | Deployment platform, SSH hosts |
-| `env/secrets` | Three-tier env file pattern (.secrets.agents / .zshrc.agents / .secrets) |
+Using gentle-ai → `prepend` recommended (your overlay reads first).
+Standalone → either works.
 
 ---
 
 ## Roadmap
 
-- [x] Fragment composition + distribute script (v1)
-- [x] `prepend` and `managed-block` modes
+- [x] Fragment composition + distribute (v0.1)
+- [x] `prepend` and `managed-block` modes with namespace-aware coexistence
 - [x] Cross-platform (macOS / Linux / Windows)
-- [x] Onboarding prompt for dialogic setup
-- [ ] Line-by-line diff in dry-run
-- [ ] `bin/scaffold.ts` — create env files from templates
-- [ ] More pre-configured targets (opencode, kimi, cursor)
-- [ ] Upstream contribution to gentle-ai as `gentle-ai overlay sync`
+- [ ] `init` wizard — interactive entrypoint that interviews you and writes fragments
+- [ ] `add` command — add a bundled preset on top of your config (e.g. `gentlesmith add critical-judge`)
+- [ ] Skill levels 2–4 (in-block references, manifest, ambient)
+- [ ] Discovery flow for `~/.secrets.agents` and `~/.zshrc.agents` (env detection from the user's environment)
+- [ ] More targets (OpenCode, Cursor, Windsurf, Kiro, Kimi, Qwen)
+- [ ] SOTA research on agent configuration architectures (consolidate or innovate; no point reinventing)
+- [ ] Formal PR to gentle-ai documenting the `gentle-ai-overlay:*` namespace contract — once we have empirical traction
+- [ ] (Eventually) hosted gallery of community profiles / sub-agent presets
+
+---
+
+## Status
+
+Alpha. Built originally as an internal layer for one developer (`agents-system`), now generalized. Expect the schema and CLI surface to evolve. The marker namespace (`gentle-ai-overlay:gentlesmith`) is stable.
 
 ---
 

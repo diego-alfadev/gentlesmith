@@ -1,7 +1,11 @@
 {
-  "name": "agents-system",
-  "private": true,
+  "name": "gentlesmith",
+  "version": "0.1.0-alpha.0",
+  "description": "Forge a custom AI agent: persona, rules, env, and skill bundles tailored to you and your system. Standalone or as a gentle-ai overlay.",
   "type": "module",
+  "bin": {
+    "gentlesmith": "./bin/distribute.ts"
+  },
   "scripts": {
     "distribute": "bun run bin/distribute.ts"
   },
@@ -10,5 +14,10 @@
   },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/diego-alfadev/gentlesmith"
   }
 }

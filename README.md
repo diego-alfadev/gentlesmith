@@ -69,6 +69,22 @@ V0.1 implements only **level 1 (forged)**. Levels 2–4 are part of the schema b
 
 ---
 
+## Personal overrides without forking
+
+Don't want to fork the repo just to tweak a fragment? Drop your version under `fragments-local/` (gitignored) — it overrides the same path in `fragments/` automatically.
+
+```bash
+# Override the public jarvis persona with your personal version
+mkdir -p fragments-local/persona
+cp fragments/persona/jarvis.md fragments-local/persona/jarvis.md
+# Edit it as you like
+bun run distribute --apply
+```
+
+Each rendered fragment is tagged with `(local)` or `(repo)` so you can see at a glance which version your agent is reading.
+
+---
+
 ## Coexistence with gentle-ai
 
 The two write to the same files (e.g. `~/.claude/CLAUDE.md`) but in **separate namespaces**:

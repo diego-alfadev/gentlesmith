@@ -1,0 +1,4 @@
+agent: opencode
+profile: jarvis
+destination: ~/.config/opencode/AGENTS.md
+mode: prepend

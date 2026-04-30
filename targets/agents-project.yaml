@@ -1,0 +1,4 @@
+agent: agents-project
+profile: jarvis
+destination: ./AGENTS.md
+mode: prepend

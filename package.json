@@ -1,6 +1,6 @@
 {
   "name": "gentlesmith",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.0-beta.0",
   "description": "Forge a custom AI agent: persona, rules, env, and skill bundles tailored to you and your system. Standalone or as a gentle-ai overlay.",
   "type": "module",
   "bin": {
@@ -10,6 +10,7 @@
     "distribute": "bun run bin/distribute.ts"
   },
   "dependencies": {
+    "@inquirer/prompts": "^7",
     "yaml": "^2.6.0"
   },
   "devDependencies": {

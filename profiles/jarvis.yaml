@@ -11,3 +11,10 @@ include:
   - env/toolchain
   - env/deployment
   - env/secrets
+
+# Optional: declare task-level skills to install via Vercel's `npx skills`.
+# gentlesmith forwards these on --apply; it does NOT maintain a skill registry.
+# See https://skills.sh for the package directory.
+# skills:
+#   - vercel-labs/react-19
+#   - vercel-labs/a11y-review

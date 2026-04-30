@@ -7,3 +7,4 @@ node_modules/
 fragments-local/
 profiles/local-*.yaml
 targets/local-*.yaml
+presets/local-*.yaml

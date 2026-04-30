@@ -1,0 +1,4 @@
+agent: cursor
+profile: jarvis
+destination: ~/.cursor/rules/
+mode: per-fragment

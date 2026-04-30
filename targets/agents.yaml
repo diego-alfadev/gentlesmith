@@ -1,0 +1,4 @@
+agent: agents
+profile: jarvis
+destination: ~/AGENTS.md
+mode: prepend

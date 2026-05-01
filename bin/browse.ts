@@ -8,11 +8,11 @@
  * Invoked via `gentlesmith browse` — dispatched from distribute.ts.
  */
 
-import { readdir, readFile, writeFile, stat } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { select, checkbox, input, confirm } from "@inquirer/prompts";
+import { select, checkbox, input, confirm, Separator } from "@inquirer/prompts";
 import type { ExitPromptError as ExitPromptErrorType } from "@inquirer/core";
 import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
 
@@ -22,38 +22,45 @@ const FRAGMENTS_LOCAL_DIR = join(ROOT, "fragments-local");
 const PROFILES_DIR = join(ROOT, "profiles");
 const TARGETS_DIR = join(ROOT, "targets");
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── ANSI helpers ─────────────────────────────────────────────────────────────
 
-async function discoverFragments(): Promise<Array<{ ref: string; heading: string; source: "repo" | "local" }>> {
-  const results: Array<{ ref: string; heading: string; source: "repo" | "local" }> = [];
+const c = {
+  bold: (s: string) => `\x1b[1m${s}\x1b[0m`,
+  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
+  cyan: (s: string) => `\x1b[36m${s}\x1b[0m`,
+  green: (s: string) => `\x1b[32m${s}\x1b[0m`,
+  yellow: (s: string) => `\x1b[33m${s}\x1b[0m`,
+  red: (s: string) => `\x1b[31m${s}\x1b[0m`,
+  magenta: (s: string) => `\x1b[35m${s}\x1b[0m`,
+};
 
-  async function walk(dir: string, prefix: string, source: "repo" | "local") {
-    if (!existsSync(dir)) return;
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name.startsWith("_")) continue;
-      const full = join(dir, e.name);
-      if (e.isDirectory()) {
-        await walk(full, prefix ? `${prefix}/${e.name}` : e.name, source);
-      } else if (e.name.endsWith(".md")) {
-        const ref = prefix ? `${prefix}/${e.name.replace(/\.md$/, "")}` : e.name.replace(/\.md$/, "");
-        const heading = await extractHeading(full);
-        results.push({ ref, heading, source });
-      }
-    }
-  }
+const HEADER = `${c.bold("gentlesmith")} ${c.dim("browse")}`;
+const LINE = c.dim("─".repeat(60));
 
-  await walk(FRAGMENTS_DIR, "", "repo");
-  // Local overrides: add if not already present as repo, or mark as local.
-  const repoRefs = new Set(results.map((r) => r.ref));
-  const localResults: typeof results = [];
-  await walk(FRAGMENTS_LOCAL_DIR, "", "local");
-  // walk pushed to results — filter: local fragments that override repo ones get source flipped.
-  // Actually, we walked into `results` already. Let me redo this cleanly.
+function clear() {
+  process.stdout.write("\x1b[2J\x1b[H");
+}
 
-  // Reset and do it properly.
-  results.length = 0;
+function banner(section?: string) {
+  clear();
+  const title = section ? `${HEADER}  ${c.dim("›")}  ${c.cyan(section)}` : HEADER;
+  console.log(`\n  ${title}\n  ${LINE}\n`);
+}
 
+async function pause() {
+  await input({ message: c.dim("press enter to continue") });
+}
+
+// ── Data loaders ─────────────────────────────────────────────────────────────
+
+interface FragmentInfo {
+  ref: string;
+  heading: string;
+  source: "repo" | "local";
+  category: string;
+}
+
+async function discoverFragments(): Promise<FragmentInfo[]> {
   const repoFragments = new Map<string, string>();
   const localFragments = new Map<string, string>();
 
@@ -75,23 +82,21 @@ async function discoverFragments(): Promise<Array<{ ref: string; heading: string
   await collectRefs(FRAGMENTS_DIR, "", repoFragments);
   await collectRefs(FRAGMENTS_LOCAL_DIR, "", localFragments);
 
-  // Merge: local wins.
   const allRefs = new Set([...repoFragments.keys(), ...localFragments.keys()]);
+  const results: FragmentInfo[] = [];
   for (const ref of [...allRefs].sort()) {
     const localPath = localFragments.get(ref);
-    const repoPath = repoFragments.get(ref);
-    const path = localPath ?? repoPath!;
+    const path = localPath ?? repoFragments.get(ref)!;
     const source: "repo" | "local" = localPath ? "local" : "repo";
     const heading = await extractHeading(path);
-    results.push({ ref, heading, source });
+    const category = ref.includes("/") ? ref.split("/")[0] : "other";
+    results.push({ ref, heading, source, category });
   }
-
   return results;
 }
 
 async function extractHeading(path: string): Promise<string> {
   const raw = await readFile(path, "utf8");
-  // Skip frontmatter.
   const body = raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
   const match = /^#\s+(.+)/m.exec(body);
   return match ? match[1].trim() : "(no heading)";
@@ -110,8 +115,7 @@ async function loadProfiles(): Promise<ProfileInfo[]> {
   const files = (await readdir(PROFILES_DIR)).filter((f) => f.endsWith(".yaml"));
   const profiles: ProfileInfo[] = [];
   for (const f of files) {
-    const path = join(PROFILES_DIR, f);
-    const raw = parseYAML(await readFile(path, "utf8")) as Record<string, unknown>;
+    const raw = parseYAML(await readFile(join(PROFILES_DIR, f), "utf8")) as Record<string, unknown>;
     profiles.push({
       name: (raw.name as string) ?? f.replace(/\.yaml$/, ""),
       file: f,
@@ -151,166 +155,251 @@ async function loadTargets(): Promise<TargetInfo[]> {
 // ── Screens ──────────────────────────────────────────────────────────────────
 
 async function showFragments() {
+  banner("Fragments");
   const fragments = await discoverFragments();
   const maxRef = Math.max(...fragments.map((f) => f.ref.length), 10);
 
-  console.log("\n  Fragments available:\n");
+  let lastCategory = "";
   for (const f of fragments) {
-    const tag = f.source === "local" ? " (local)" : "";
-    console.log(`  ${f.ref.padEnd(maxRef + 2)} ${f.heading}${tag}`);
+    if (f.category !== lastCategory) {
+      if (lastCategory) console.log("");
+      console.log(`  ${c.bold(f.category.toUpperCase())}`);
+      lastCategory = f.category;
+    }
+    const tag = f.source === "local" ? c.yellow(" (local)") : "";
+    console.log(`    ${c.cyan(f.ref.padEnd(maxRef + 2))} ${f.heading}${tag}`);
   }
-  console.log("");
+
+  console.log(`\n  ${c.dim(`${fragments.length} fragments total`)}\n`);
+  await pause();
 }
 
 async function showProfiles() {
+  banner("Profiles");
   const profiles = await loadProfiles();
 
-  console.log("\n  Profiles:\n");
   for (const p of profiles) {
-    const tag = p.isLocal ? " (local)" : "";
-    console.log(`  ${p.name}${tag}`);
-    if (p.description) console.log(`    ${p.description}`);
-    console.log(`    includes: ${p.include.join(", ") || "(none)"}`);
-    if (p.skills.length > 0) console.log(`    skills: ${p.skills.join(", ")}`);
+    const tag = p.isLocal ? c.yellow(" (local)") : c.dim(" (bundled)");
+    console.log(`  ${c.bold(p.name)}${tag}`);
+    if (p.description) console.log(`  ${c.dim(p.description)}`);
     console.log("");
+
+    if (p.include.length > 0) {
+      for (const ref of p.include) {
+        console.log(`    ${c.green("●")} ${ref}`);
+      }
+    } else {
+      console.log(`    ${c.dim("(no fragments)")}`);
+    }
+
+    if (p.skills.length > 0) {
+      console.log("");
+      for (const s of p.skills) {
+        console.log(`    ${c.magenta("◆")} ${s}`);
+      }
+    }
+    console.log(`\n  ${LINE}\n`);
   }
+  await pause();
 }
 
 async function showTargets() {
+  banner("Targets");
   const targets = await loadTargets();
 
-  console.log("\n  Targets:\n");
-  const maxName = Math.max(...targets.map((t) => t.name.length), 6);
-  const maxMode = Math.max(...targets.map((t) => t.mode.length), 4);
   for (const t of targets) {
-    console.log(`  ${t.name.padEnd(maxName + 2)} ${t.mode.padEnd(maxMode + 2)} → ${t.destination}  (profile: ${t.profile})`);
+    const modeColor = t.mode === "per-fragment" ? c.magenta(t.mode) : c.green(t.mode);
+    console.log(`  ${c.bold(t.name)}`);
+    console.log(`    agent:    ${t.agent}`);
+    console.log(`    profile:  ${t.profile}`);
+    console.log(`    dest:     ${c.cyan(t.destination)}`);
+    console.log(`    mode:     ${modeColor}`);
+    console.log("");
   }
-  console.log("");
+
+  console.log(`  ${c.dim(`${targets.length} targets configured`)}\n`);
+  await pause();
 }
 
 async function editProfile() {
+  banner("Edit Profile");
   const profiles = await loadProfiles();
   const localProfiles = profiles.filter((p) => p.isLocal);
 
   if (localProfiles.length === 0) {
-    console.log("\n  No local profiles found. Run `gentlesmith init` first.\n");
+    console.log(`  ${c.yellow("No local profiles found.")} Run ${c.cyan("gentlesmith init")} first.\n`);
+    await pause();
     return;
   }
 
-  const profileName = await select({
+  const profileFile = await select({
     message: "Which profile to edit?",
     choices: localProfiles.map((p) => ({
-      name: `${p.name} (${p.include.length} fragments)`,
+      name: `${p.name}  ${c.dim(`(${p.include.length} fragments)`)}`,
       value: p.file,
     })),
   });
 
-  const profilePath = join(PROFILES_DIR, profileName);
-  const profile = parseYAML(await readFile(profilePath, "utf8")) as Record<string, unknown>;
-  const currentIncludes: string[] = Array.isArray(profile.include) ? profile.include : [];
+  const profilePath = join(PROFILES_DIR, profileFile);
+  const profileDoc = parseYAML(await readFile(profilePath, "utf8")) as Record<string, unknown>;
+  const currentIncludes: string[] = Array.isArray(profileDoc.include) ? profileDoc.include : [];
 
   const fragments = await discoverFragments();
 
-  const selected = await checkbox({
-    message: "Toggle fragments (space to select, enter to confirm):",
-    choices: fragments.map((f) => ({
-      name: `${f.ref} — ${f.heading}${f.source === "local" ? " (local)" : ""}`,
-      value: f.ref,
-      checked: currentIncludes.includes(f.ref),
-    })),
-  });
-
-  if (arraysEqual(selected, currentIncludes)) {
-    console.log("\n  No changes.\n");
-    return;
+  // Group by category for a cleaner checkbox UI.
+  const categories = [...new Set(fragments.map((f) => f.category))];
+  const choices: Array<{ name: string; value: string; checked: boolean } | Separator> = [];
+  for (const cat of categories) {
+    choices.push(new Separator(c.dim(`── ${cat} ──`)));
+    for (const f of fragments.filter((fr) => fr.category === cat)) {
+      const tag = f.source === "local" ? c.yellow(" ◂local") : "";
+      const active = currentIncludes.includes(f.ref);
+      choices.push({
+        name: `${f.ref}  ${c.dim("—")}  ${f.heading}${tag}`,
+        value: f.ref,
+        checked: active,
+      });
+    }
   }
 
+  banner("Edit Profile");
+  console.log(`  Editing ${c.bold(profileFile)}\n`);
+  console.log(`  ${c.dim("Space = toggle, Enter = confirm, Ctrl-C = cancel")}\n`);
+
+  const selected = await checkbox({ message: "Fragments:", choices });
+
+  // Compute diff.
   const added = selected.filter((s) => !currentIncludes.includes(s));
   const removed = currentIncludes.filter((s) => !selected.includes(s));
 
-  if (added.length > 0) console.log(`  + ${added.join(", ")}`);
-  if (removed.length > 0) console.log(`  - ${removed.join(", ")}`);
-
-  const ok = await confirm({ message: "Save changes?", default: true });
-  if (!ok) {
-    console.log("  Aborted.\n");
+  if (added.length === 0 && removed.length === 0) {
+    console.log(`\n  ${c.dim("No changes.")}\n`);
+    await pause();
     return;
   }
 
-  profile.include = selected;
-  await writeFile(profilePath, stringifyYAML(profile), "utf8");
-  console.log(`  Saved. Run \`gentlesmith --apply\` to render.\n`);
+  // Show diff.
+  banner("Edit Profile — Review Changes");
+  console.log(`  Profile: ${c.bold(profileFile)}\n`);
+  for (const a of added) console.log(`  ${c.green("+ " + a)}`);
+  for (const r of removed) console.log(`  ${c.red("- " + r)}`);
+  console.log("");
+
+  const ok = await confirm({ message: "Save these changes?", default: true });
+  if (!ok) {
+    console.log(`  ${c.dim("Cancelled.")}\n`);
+    return;
+  }
+
+  profileDoc.include = selected;
+  await writeFile(profilePath, stringifyYAML(profileDoc), "utf8");
+  console.log(`\n  ${c.green("✓")} Saved. Run ${c.cyan("gentlesmith --apply")} to render.\n`);
+  await pause();
 }
 
 async function createProfile() {
-  const handle = await input({
-    message: "Profile name (slug):",
+  banner("Create Profile");
+
+  const rawHandle = await input({
+    message: "Profile name:",
     validate: (v) => v.trim().length > 0 || "Cannot be empty",
-    transformer: (v) => v.trim().toLowerCase().replace(/[^a-z0-9-]/g, "-"),
   });
 
-  const slug = handle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const slug = rawHandle.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const fileName = `local-${slug}.yaml`;
   const filePath = join(PROFILES_DIR, fileName);
 
   if (existsSync(filePath)) {
-    console.log(`  Profile ${fileName} already exists. Use edit instead.\n`);
+    console.log(`\n  ${c.yellow(fileName)} already exists. Use ${c.cyan("Edit")} instead.\n`);
+    await pause();
     return;
   }
 
   const fragments = await discoverFragments();
-  const selected = await checkbox({
-    message: "Select fragments to include:",
-    choices: fragments.map((f) => ({
-      name: `${f.ref} — ${f.heading}`,
-      value: f.ref,
-    })),
-  });
+  const categories = [...new Set(fragments.map((f) => f.category))];
+  const choices: Array<{ name: string; value: string; checked: boolean } | Separator> = [];
+  for (const cat of categories) {
+    choices.push(new Separator(c.dim(`── ${cat} ──`)));
+    for (const f of fragments.filter((fr) => fr.category === cat)) {
+      choices.push({
+        name: `${f.ref}  ${c.dim("—")}  ${f.heading}`,
+        value: f.ref,
+        checked: false,
+      });
+    }
+  }
+
+  console.log(`\n  ${c.dim("Select fragments for")} ${c.bold(fileName)}\n`);
+  const selected = await checkbox({ message: "Include:", choices });
+
+  // Preview.
+  banner("Create Profile — Preview");
+  console.log(`  ${c.bold(fileName)}\n`);
+  if (selected.length === 0) {
+    console.log(`  ${c.dim("(empty profile)")}`);
+  } else {
+    for (const s of selected) console.log(`  ${c.green("●")} ${s}`);
+  }
+  console.log("");
+
+  const ok = await confirm({ message: `Create ${fileName}?`, default: true });
+  if (!ok) {
+    console.log(`  ${c.dim("Cancelled.")}\n`);
+    return;
+  }
 
   const profile = {
     name: `local-${slug}`,
-    description: `Created via gentlesmith browse`,
+    description: "Created via gentlesmith browse",
     include: selected,
   };
 
   await writeFile(filePath, stringifyYAML(profile), "utf8");
-  console.log(`\n  Created ${fileName} with ${selected.length} fragments.`);
-  console.log(`  Run \`gentlesmith --apply\` to render.\n`);
+  console.log(`\n  ${c.green("✓")} Created ${c.cyan(fileName)} with ${selected.length} fragments.`);
+  console.log(`  Run ${c.cyan("gentlesmith --apply")} to render.\n`);
+  await pause();
 }
 
 async function dryRun() {
-  console.log("");
+  banner("Dry-run");
   spawnSync("bun", [join(ROOT, "bin/distribute.ts")], { stdio: "inherit" });
   console.log("");
+  await pause();
 }
 
 async function applyNow() {
-  const ok = await confirm({ message: "Apply changes to all targets?", default: true });
+  banner("Apply");
+  const ok = await confirm({ message: "Write changes to all agent config files?", default: true });
   if (!ok) return;
   console.log("");
   spawnSync("bun", [join(ROOT, "bin/distribute.ts"), "--apply"], { stdio: "inherit" });
-  console.log("");
+  console.log(`\n  ${c.green("✓")} Done.\n`);
+  await pause();
 }
 
 // ── Main loop ────────────────────────────────────────────────────────────────
 
 export async function runBrowse(): Promise<void> {
-  console.log("gentlesmith browse — interactive explorer\n");
-
   while (true) {
+    banner();
+
     let action: string;
     try {
       action = await select({
         message: "What do you want to do?",
         choices: [
-          { name: "View fragments", value: "fragments" },
-          { name: "View profiles", value: "profiles" },
-          { name: "View targets", value: "targets" },
-          { name: "Edit a profile (toggle fragments)", value: "edit" },
-          { name: "Create a new profile", value: "create" },
-          { name: "Dry-run (preview changes)", value: "dryrun" },
-          { name: "Apply now", value: "apply" },
-          { name: "Exit", value: "exit" },
+          new Separator(c.dim("── explore ──")),
+          { name: `${c.cyan("◉")} View fragments`, value: "fragments" },
+          { name: `${c.cyan("◉")} View profiles`, value: "profiles" },
+          { name: `${c.cyan("◉")} View targets`, value: "targets" },
+          new Separator(c.dim("── manage ──")),
+          { name: `${c.green("✎")} Edit a profile`, value: "edit" },
+          { name: `${c.green("+")} Create a profile`, value: "create" },
+          new Separator(c.dim("── render ──")),
+          { name: `${c.yellow("▶")} Dry-run (preview)`, value: "dryrun" },
+          { name: `${c.magenta("▶")} Apply now`, value: "apply" },
+          new Separator(""),
+          { name: `${c.dim("exit")}`, value: "exit" },
         ],
       });
     } catch (err) {
@@ -327,7 +416,7 @@ export async function runBrowse(): Promise<void> {
         case "create": await createProfile(); break;
         case "dryrun": await dryRun(); break;
         case "apply": await applyNow(); break;
-        case "exit": return;
+        case "exit": clear(); return;
       }
     } catch (err) {
       if (isExitPromptError(err)) continue;
@@ -337,11 +426,6 @@ export async function runBrowse(): Promise<void> {
 }
 
 // ── Utils ────────────────────────────────────────────────────────────────────
-
-function arraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
-}
 
 function isExitPromptError(err: unknown): err is ExitPromptErrorType {
   return typeof err === "object" && err !== null && (err as { name?: string }).name === "ExitPromptError";

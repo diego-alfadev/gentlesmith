@@ -38,6 +38,7 @@ The `init` wizard registers `gentlesmith` as a global command via `bun link` (a 
 ```bash
 gentlesmith           # dry-run — preview what would change
 gentlesmith --apply   # write changes to all agent config files
+gentlesmith browse    # interactive TUI — explore, edit profiles, apply
 gentlesmith update    # git pull + bun install (self-update)
 ```
 
@@ -54,6 +55,7 @@ gentlesmith update    # git pull + bun install (self-update)
 | `gentlesmith init` | Interactive wizard: create a local profile, register global command |
 | `gentlesmith add` | List available preset bundles |
 | `gentlesmith add <preset>` | Layer a preset on top of your local profile |
+| `gentlesmith browse` | Interactive TUI: view fragments/profiles/targets, edit, apply |
 | `gentlesmith update` | Self-update: `git pull` + `bun install` in the repo |
 
 ---
@@ -326,7 +328,7 @@ gentlesmith writes content into files that AI agents read on every conversation:
 - [x] Cursor per-fragment rendering (`mode: per-fragment`, `.mdc` with frontmatter projection)
 - [x] Project-level AGENTS.md target (with self-write guard)
 - [x] `gentlesmith update` — self-update via git pull
-- [ ] TUI browser — `gentlesmith browse` to explore profiles and fragments interactively
+- [x] TUI browser — `gentlesmith browse` to explore, edit profiles, and apply interactively
 - [ ] Discovery flow for `~/.secrets.agents` and `~/.zshrc.agents`
 - [ ] More targets (Windsurf, Kiro, Kimi, Qwen)
 - [ ] Formal PR to gentle-ai documenting the `gentle-ai-overlay:*` namespace contract

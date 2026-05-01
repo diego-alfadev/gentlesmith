@@ -531,6 +531,11 @@ async function main() {
     await runAdd(process.argv.slice(3));
     process.exit(0);
   }
+  if (process.argv[2] === "browse") {
+    const { runBrowse } = await import("./browse.ts");
+    await runBrowse();
+    process.exit(0);
+  }
   if (process.argv[2] === "update") {
     runUpdate();
     process.exit(0);

@@ -10,7 +10,7 @@
 | `sed` | `sd` |
 | `ls` | `eza` |
 
-If one is missing, install via the platform's package manager (`brew`, `apt`, `dnf`, `pacman`, `winget`, `scoop`, etc.). If unavailable, fall back to the default and say so.
+If one is missing, fall back to the default. Ask before installing tools or changing the user's machine.
 
 ## GitHub
 
@@ -24,6 +24,8 @@ Use `gh` CLI for all GitHub operations: issues, PRs, runs, releases, comments, c
 | `npm run` | `bun run` |
 | `npx` | `bunx` |
 | `npm test` | `bun test` |
+
+Use a documented runner when a tool explicitly requires one; for example, `npx skills` for the Skills bridge.
 
 Node versions managed by `fnm` with auto-switch via `.nvmrc` / `.node-version`. **Do not use `nvm`.**
 

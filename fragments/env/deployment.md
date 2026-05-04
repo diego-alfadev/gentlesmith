@@ -1,10 +1,10 @@
 # Deployment
 
-> Example fragment. Defines a deployment platform and SSH host pattern. Edit to match your stack (Coolify, Vercel, Fly.io, AWS, Railway, etc.) or remove from your profile.
+> Example fragment. Defines a deployment platform and SSH host pattern. Edit to match your stack (self-hosted PaaS, Vercel, Fly.io, AWS, Railway, etc.) or remove from your profile.
 
 ## Deployment platform
 
-If you use a self-hosted or managed PaaS (Coolify, Vercel, Fly.io, Railway, etc.):
+If you use a self-hosted or managed PaaS (Vercel, Fly.io, Railway, AWS, etc.):
 
 ```bash
 # ~/.secrets.agents — example

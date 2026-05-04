@@ -1,20 +1,14 @@
 name: jarvis
-description: Full stack — system-aware, opinionated, mentor mode. Persona + operative rules + system context. Does NOT include engram protocol or SDD orchestrator (gentle-ai territory).
+description: Developer baseline — Jarvis-inspired persona + technical judgment rules. No machine-specific env or tool preferences.
 include:
   - persona/jarvis
   - persona/karpathy-guidelines
   - rules/safety
   - rules/workflow
   - rules/commits
-  - rules/tools
-  - env/system
-  - env/toolchain
-  - env/deployment
-  - env/secrets
 
-# Optional: declare task-level skills to install via Vercel's `npx skills`.
-# gentlesmith forwards these on --apply; it does NOT maintain a skill registry.
-# See https://skills.sh for the package directory.
+# Optional: reference existing skills. gentlesmith discovers/toggles skills; it
+# does not build them. Use gentle-ai or a dedicated skill builder to create them.
 # skills:
 #   - vercel-labs/react-19
 #   - vercel-labs/a11y-review

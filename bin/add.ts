@@ -4,23 +4,28 @@
  *
  * Usage:
  *   gentlesmith add                # list available presets
- *   gentlesmith add <preset>       # apply preset to newest local profile
+ *   gentlesmith add <preset>       # apply preset to a local profile
+ *   gentlesmith preset list        # list available presets
+ *   gentlesmith preset add <name>  # apply preset to a local profile
  *
  * Presets live in presets/*.yaml. Each declares `include` and/or `skills`
- * entries that get merged into the user's local profile (profiles/local-*.yaml).
+ * entries that get merged into a runtime-home local profile.
  * Idempotent: re-running shows "already applied" if nothing new.
  */
 
-import { readdir, readFile, writeFile, stat } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { confirm } from "@inquirer/prompts";
+import { confirm, select } from "@inquirer/prompts";
 import type { ExitPromptError as ExitPromptErrorType } from "@inquirer/core";
 import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
+import {
+  ensureRuntimeState,
+  listLocalProfiles,
+  resolvePresetPath,
+  resolveRuntimePaths,
+} from "./runtime";
 
-const ROOT = resolve(import.meta.dir, "..");
-const PROFILES_DIR = join(ROOT, "profiles");
-const PRESETS_DIR = join(ROOT, "presets");
+const PATHS = resolveRuntimePaths();
 
 interface PresetSpec {
   description?: string;
@@ -38,28 +43,30 @@ interface ProfileDoc {
 
 export async function runAdd(args: string[]): Promise<void> {
   const presetName = args[0];
+  const profileName = readFlag(args, "--profile");
 
   // No args → list available presets.
   if (!presetName) {
+    await ensureRuntimeState(PATHS);
     await listPresets();
     return;
   }
 
-  // Resolve preset file.
-  const presetPath = join(PRESETS_DIR, `${presetName}.yaml`);
-  if (!existsSync(presetPath)) {
+  // Resolve preset file (guard against path traversal).
+  if (presetName.includes("..") || presetName.includes("/")) {
+    console.error(`Invalid preset name: ${presetName}`);
+    process.exit(1);
+  }
+  await ensureRuntimeState(PATHS);
+  const presetPath = resolvePresetPath(PATHS, presetName);
+  if (!presetPath || !existsSync(presetPath)) {
     console.error(`Preset not found: ${presetName}`);
     console.error(`Available presets:`);
     await listPresets();
     process.exit(1);
   }
 
-  // Find newest local profile.
-  const profilePath = await findNewestLocalProfile();
-  if (!profilePath) {
-    console.error("No local profile found. Run `gentlesmith init` first.");
-    process.exit(1);
-  }
+  const profilePath = await resolveProfileForPreset(profileName);
 
   const preset = parseYAML(await readFile(presetPath, "utf8")) as PresetSpec;
   const profile = parseYAML(await readFile(profilePath, "utf8")) as ProfileDoc;
@@ -75,7 +82,7 @@ export async function runAdd(args: string[]): Promise<void> {
     return;
   }
 
-  const profileRelative = profilePath.replace(ROOT + "/", "");
+  const profileRelative = profilePath.replace(PATHS.runtimeHome + "/", "~/.gentlesmith/");
   console.log(`Will add to ${profileRelative}:`);
   for (const i of newIncludes) console.log(`  + include: ${i}`);
   for (const s of newSkills) console.log(`  + skill:   ${s}`);
@@ -103,43 +110,92 @@ export async function runAdd(args: string[]): Promise<void> {
   }
 
   await writeFile(profilePath, stringifyYAML(profile), "utf8");
-  console.log(`Applied. Run \`gentlesmith --apply\` to render.`);
+  console.log("Applied. Run `gentlesmith sync --apply` to render.");
+}
+
+export async function runPreset(args: string[]): Promise<void> {
+  const [subcommand, name] = args;
+
+  if (!subcommand || subcommand === "list") {
+    await ensureRuntimeState(PATHS);
+    await listPresets();
+    return;
+  }
+
+  if (subcommand === "add") {
+    if (!name) {
+      console.error("Usage: gentlesmith preset add <preset>");
+      process.exit(1);
+    }
+    await runAdd(args.slice(1));
+    return;
+  }
+
+  console.error("Usage:");
+  console.error("  gentlesmith preset list");
+  console.error("  gentlesmith preset add <preset> [--profile <profile>]");
+  process.exit(1);
+}
+
+function readFlag(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return undefined;
+  return args[idx + 1];
+}
+
+async function resolveProfileForPreset(profileName?: string): Promise<string> {
+  const profiles = await listLocalProfiles(PATHS);
+  if (profiles.length === 0) {
+    console.error("No local profile found. Run `gentlesmith init` first.");
+    process.exit(1);
+  }
+
+  if (profileName) {
+    const match = profiles.find((profile) => profile.name === profileName);
+    if (!match) {
+      console.error(`Local profile not found: ${profileName}`);
+      console.error("Available local profiles:");
+      for (const profile of profiles) console.error(`  ${profile.name}`);
+      process.exit(1);
+    }
+    return match.path;
+  }
+
+  if (profiles.length === 1) return profiles[0].path;
+
+  try {
+    return await select({
+      message: "Which local profile should receive this preset?",
+      choices: profiles.map((profile) => ({ name: profile.name, value: profile.path })),
+    });
+  } catch (err) {
+    if (isExitPromptError(err)) {
+      console.log("\nAborted.");
+      process.exit(0);
+    }
+    throw err;
+  }
 }
 
 async function listPresets(): Promise<void> {
-  if (!existsSync(PRESETS_DIR)) {
-    console.log("No presets directory found.");
-    return;
-  }
-  const files = (await readdir(PRESETS_DIR)).filter(
-    (f) => f.endsWith(".yaml") && !f.startsWith("local-"),
-  );
+  const localFiles = existsSync(PATHS.localPresetsDir)
+    ? (await readdir(PATHS.localPresetsDir)).filter((f) => f.endsWith(".yaml"))
+    : [];
+  const builtInFiles = existsSync(PATHS.builtInPresetsDir)
+    ? (await readdir(PATHS.builtInPresetsDir)).filter((f) => f.endsWith(".yaml") && !f.startsWith("local-"))
+    : [];
+  const files = Array.from(new Set([...builtInFiles, ...localFiles])).sort();
   if (files.length === 0) {
     console.log("No presets available.");
     return;
   }
   for (const f of files) {
-    const preset = parseYAML(await readFile(join(PRESETS_DIR, f), "utf8")) as PresetSpec;
+    const path = resolvePresetPath(PATHS, f.replace(/\.yaml$/, ""));
+    if (!path) continue;
+    const preset = parseYAML(await readFile(path, "utf8")) as PresetSpec;
     const name = f.replace(/\.yaml$/, "");
     console.log(`  ${name.padEnd(20)} ${preset.description ?? ""}`);
   }
-}
-
-async function findNewestLocalProfile(): Promise<string | null> {
-  if (!existsSync(PROFILES_DIR)) return null;
-  const files = (await readdir(PROFILES_DIR)).filter(
-    (f) => f.startsWith("local-") && f.endsWith(".yaml"),
-  );
-  if (files.length === 0) return null;
-
-  const withMtime = await Promise.all(
-    files.map(async (f) => ({
-      path: join(PROFILES_DIR, f),
-      mtime: (await stat(join(PROFILES_DIR, f))).mtimeMs,
-    })),
-  );
-  withMtime.sort((a, b) => b.mtime - a.mtime);
-  return withMtime[0].path;
 }
 
 function isExitPromptError(err: unknown): err is ExitPromptErrorType {

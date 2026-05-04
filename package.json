@@ -1,20 +1,22 @@
 {
   "name": "gentlesmith",
   "version": "0.2.0-beta.0",
-  "description": "Forge a custom AI agent: persona, rules, env, and skill bundles tailored to you and your system. Standalone or as a gentle-ai overlay.",
+  "description": "Compose reusable prompt fragments into local AI-agent config overlays. Standalone or as a gentle-ai customization layer.",
   "type": "module",
   "bin": {
     "gentlesmith": "./bin/distribute.ts"
   },
   "scripts": {
-    "distribute": "bun run bin/distribute.ts"
+    "distribute": "bun run bin/distribute.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@inquirer/prompts": "^7",
     "yaml": "^2.6.0"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^6.0.3"
   },
   "license": "MIT",
   "repository": {

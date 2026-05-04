@@ -1,78 +1,37 @@
 #!/usr/bin/env bun
-/**
- * gentlesmith — forge a custom AI agent
- *
- * Compose fragments → profiles → render into agent system-prompt files via
- * a managed marker block. Dry-run by default. Pass --apply to write.
- *
- * Modes (set in targets/*.yaml):
- *   managed-block  — appends block at end of existing file
- *   prepend        — puts block at top; gentle-ai content (if any) stays below
- *   per-fragment   — one .mdc file per fragment (Cursor rules dir)
- *
- * Marker namespace:
- *   <!-- gentle-ai-overlay:gentlesmith -->
- *     ...rendered profile content...
- *   <!-- /gentle-ai-overlay:gentlesmith -->
- *
- * Coexistence: gentle-ai's own markers (<!-- gentle-ai:* -->) and ours
- * (<!-- gentle-ai-overlay:gentlesmith -->) live in the same file without
- * collision. gentle-ai's sync preserves anything outside its namespace.
- *
- * Usage:
- *   bun run distribute                    # dry-run, all targets
- *   bun run distribute --target claude    # dry-run, only claude
- *   bun run distribute --apply            # apply all
- *   bun run distribute --apply --target claude
- *
- *   # Or via npx (after publish):
- *   npx gentlesmith --apply
- */
 
-import { readdir, readFile, writeFile, mkdir, unlink } from "node:fs/promises";
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYAML } from "yaml";
+import {
+  BLOCK_RE,
+  BLOCK_START,
+  BLOCK_END,
+  FRAGMENT_MARKER_PREFIX,
+  PACKAGE_ROOT,
+  ensureRuntimeState,
+  listInstalledTargets,
+  loadProfile,
+  migrateRuntimeState,
+  resolveFragmentPath,
+  resolveRuntimePaths,
+  resolveUserPath,
+  stripManagedBlock,
+  writeRuntimeFile,
+  type ProfileSpec,
+  type TargetSpec,
+} from "./runtime";
+import { runTarget } from "./target";
+import {
+  applyOpenCodeAgentPlan,
+  planOpenCodeProfileAgent,
+  summarizeOpenCodeAgentPlan,
+} from "./opencode";
 
-const ROOT = resolve(import.meta.dir, "..");
-const FRAGMENTS_DIR = join(ROOT, "fragments");
-const FRAGMENTS_LOCAL_DIR = join(ROOT, "fragments-local");  // gitignored personal overrides
-const PROFILES_DIR = join(ROOT, "profiles");
-const TARGETS_DIR = join(ROOT, "targets");
-const RENDERED_DIR = join(ROOT, ".last-rendered");
-
-const BLOCK_NAME = "gentlesmith";
-const BLOCK_START = `<!-- gentle-ai-overlay:${BLOCK_NAME} -->`;
-const BLOCK_END = `<!-- /gentle-ai-overlay:${BLOCK_NAME} -->`;
-
-// BLOCK_RE matches the current marker AND legacy markers from earlier versions
-// of this tool, so a single --apply migrates files seamlessly. If multiple
-// blocks somehow exist, only the first is consumed; rerun --apply to clean up.
-const BLOCK_RE = new RegExp(
-  [
-    // Current: <!-- gentle-ai-overlay:gentlesmith --> ... <!-- /gentle-ai-overlay:gentlesmith -->
-    `<!-- gentle-ai-overlay:${BLOCK_NAME} -->[\\s\\S]*?<!-- /gentle-ai-overlay:${BLOCK_NAME} -->`,
-    // Legacy v0 (agents-system pre-rebrand): <!-- agents-system:start vX --> ... <!-- agents-system:end -->
-    `<!-- agents-system:start [^>]*-->[\\s\\S]*?<!-- agents-system:end -->`,
-  ].join("|"),
-  "m",
-);
-
-interface ProfileSpec {
-  name: string;
-  description?: string;
-  include: string[];
-  skills?: string[];
-}
-
-interface TargetSpec {
-  agent: string;
-  profile: string;
-  destination: string;
-  mode: "managed-block" | "prepend" | "per-fragment";
-}
+const PATHS = resolveRuntimePaths();
+const KNOWN_FRONTMATTER_KEYS = new Set(["scope", "condition", "description", "globs", "alwaysApply"]);
 
 type ChangeType = "create" | "replace-block" | "prepend-block" | "append-block" | "noop";
 
@@ -88,10 +47,12 @@ interface RenderPlan {
   preservedLines: number;
 }
 
-function resolvePath(p: string): string {
-  if (p.startsWith("~")) return join(homedir(), p.slice(1));
-  if (p.startsWith("./")) return resolve(process.cwd(), p.slice(2));
-  return p;
+interface PerFragmentPlan {
+  targetName: string;
+  target: TargetSpec;
+  profile: ProfileSpec;
+  destinationDir: string;
+  operations: Array<{ kind: "create" | "update" | "delete"; path: string; content?: string }>;
 }
 
 function isGentlesmithRepo(dir: string): boolean {
@@ -102,27 +63,6 @@ function isGentlesmithRepo(dir: string): boolean {
   );
 }
 
-async function loadYAML<T>(path: string): Promise<T> {
-  return parseYAML(await readFile(path, "utf8")) as T;
-}
-
-async function loadAllTargets(filter?: string): Promise<Array<{ name: string; spec: TargetSpec }>> {
-  const files = (await readdir(TARGETS_DIR)).filter((f) => f.endsWith(".yaml"));
-  const out: Array<{ name: string; spec: TargetSpec }> = [];
-  for (const f of files) {
-    const name = f.replace(/\.yaml$/, "");
-    if (filter && name !== filter) continue;
-    out.push({ name, spec: await loadYAML<TargetSpec>(join(TARGETS_DIR, f)) });
-  }
-  return out;
-}
-
-async function loadProfile(name: string): Promise<ProfileSpec> {
-  return loadYAML<ProfileSpec>(join(PROFILES_DIR, `${name}.yaml`));
-}
-
-const KNOWN_FRONTMATTER_KEYS = new Set(["scope", "condition"]);
-
 function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
   const fenceRe = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
   const match = fenceRe.exec(raw);
@@ -132,41 +72,33 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: s
   try {
     const parsed = parseYAML(match[1]);
     const meta = parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
+      ? parsed as Record<string, unknown>
       : {};
     return { meta, body };
   } catch (err) {
-    // Malformed frontmatter — log and fall through to no-scope (include always).
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`  WARNING: malformed frontmatter (treated as none): ${msg}`);
-    return { meta: {}, body };
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`  WARNING: malformed frontmatter (treated as none): ${message}`);
+    return { meta: {}, body: raw };
   }
 }
 
 async function composeFragments(profile: ProfileSpec, agentName: string): Promise<string> {
   const parts: string[] = [];
   for (const ref of profile.include) {
-    // Resolution order: fragments-local/ wins over fragments/.
-    // Lets users keep personal overrides outside the public repo (gitignored).
-    const localPath = join(FRAGMENTS_LOCAL_DIR, `${ref}.md`);
-    const repoPath = join(FRAGMENTS_DIR, `${ref}.md`);
-    const path = existsSync(localPath) ? localPath : repoPath;
-    if (!existsSync(path)) {
-      throw new Error(`Fragment not found: ${ref} (looked at ${localPath} and ${repoPath})`);
-    }
-    const source = path === localPath ? "local" : "repo";
+    if (ref.includes("..")) throw new Error(`Fragment ref must not contain "..": ${ref}`);
+    const path = resolveFragmentPath(PATHS, ref);
+    if (!existsSync(path)) throw new Error(`Fragment not found: ${ref}`);
+
+    const source = path.startsWith(PATHS.localFragmentsDir) ? "local" : "repo";
     const raw = await readFile(path, "utf8");
     const { meta, body } = parseFrontmatter(raw);
 
-    // Warn on unrecognized frontmatter keys.
     for (const key of Object.keys(meta)) {
       if (!KNOWN_FRONTMATTER_KEYS.has(key)) {
         console.warn(`  WARNING: fragment ${ref} has unrecognized frontmatter key: "${key}"`);
       }
     }
 
-    // Scope filter: accept string ("agents") or list (["agents", "claude"]).
-    // Skip when scope is set and current agent is not included.
     if (meta.scope !== undefined && meta.scope !== null) {
       const scopes = Array.isArray(meta.scope) ? meta.scope : [meta.scope];
       if (!scopes.includes(agentName)) continue;
@@ -183,55 +115,53 @@ function wrapManagedBlock(body: string): string {
   return `${BLOCK_START}\n\n${body}\n\n${BLOCK_END}`;
 }
 
-function stripBlock(content: string): string {
-  return content.replace(BLOCK_RE, "").replace(/^\n+/, "").trimEnd();
+async function loadInstalledTargetsFiltered(filter?: string) {
+  const targets = await listInstalledTargets(PATHS);
+  return targets
+    .filter((target) => target.spec.enabled !== false)
+    .filter((target) => !filter || target.name === filter);
 }
 
 async function planTarget(name: string, target: TargetSpec, args: string[]): Promise<RenderPlan | null> {
-  const profile = await loadProfile(target.profile);
+  const profile = await loadProfile(PATHS, target.profile);
   const composed = await composeFragments(profile, target.agent);
   const block = wrapManagedBlock(composed);
-  const destinationResolved = resolvePath(target.destination);
+  const destinationResolved = resolveUserPath(target.destination);
 
-  // Self-write guard: prevent polluting gentlesmith's own repo with rendered output.
   const destDir = target.destination.startsWith("./") ? process.cwd() : dirname(destinationResolved);
   if (target.destination.startsWith("./") && isGentlesmithRepo(destDir) && !args.includes("--force")) {
     console.log(`\n━━━ target: ${name} (agent=${target.agent}) ━━━`);
-    console.warn(`  SKIPPED — running inside gentlesmith repo (use --force to override)`);
+    console.warn("  SKIPPED — running inside gentlesmith repo (use --force to override)");
     return null;
   }
+
   const preExisting = existsSync(destinationResolved);
   const prepend = target.mode === "prepend";
-
   let finalContent: string;
   let changeType: ChangeType = "create";
   let preservedLines = 0;
 
   if (!preExisting) {
-    finalContent = block + "\n";
+    finalContent = `${block}\n`;
   } else {
     const current = await readFile(destinationResolved, "utf8");
     const hasBlock = BLOCK_RE.test(current);
 
     if (prepend) {
-      // Always keep block at top. Strip existing block (wherever it is), prepend fresh.
-      const rest = hasBlock ? stripBlock(current) : current.trimEnd();
-      const candidate = rest.length > 0
-        ? `${block}\n\n${rest}\n`
-        : `${block}\n`;
+      const rest = hasBlock ? stripManagedBlock(current) : current.trimEnd();
+      const candidate = rest.length > 0 ? `${block}\n\n${rest}\n` : `${block}\n`;
       changeType = candidate === current ? "noop" : (hasBlock ? "replace-block" : "prepend-block");
       finalContent = candidate;
       preservedLines = rest.split("\n").length;
     } else {
-      // managed-block: append or in-place replace
       if (hasBlock) {
         const replaced = current.replace(BLOCK_RE, block);
         finalContent = replaced;
         changeType = replaced === current ? "noop" : "replace-block";
         preservedLines = current.split("\n").length - block.split("\n").length;
       } else {
-        const sep = current.endsWith("\n") ? "" : "\n";
-        finalContent = `${current}${sep}\n${block}\n`;
+        const separator = current.endsWith("\n") ? "" : "\n";
+        finalContent = `${current}${separator}\n${block}\n`;
         changeType = "append-block";
         preservedLines = current.split("\n").length;
       }
@@ -256,11 +186,11 @@ function summarize(plan: RenderPlan, apply: boolean) {
   const blockLines = wrapManagedBlock(plan.composed).split("\n").length;
   const verb = apply ? "WRITE" : "WOULD";
   const actionLabel: Record<ChangeType, string> = {
-    create:          `${verb} CREATE`,
+    create: `${verb} CREATE`,
     "replace-block": `${verb} REPLACE BLOCK`,
     "prepend-block": `${verb} PREPEND BLOCK`,
-    "append-block":  `${verb} APPEND BLOCK`,
-    noop:            "NO CHANGES",
+    "append-block": `${verb} APPEND BLOCK`,
+    noop: "NO CHANGES",
   };
 
   console.log(`\n━━━ target: ${plan.targetName} (agent=${plan.target.agent}) ━━━`);
@@ -272,148 +202,75 @@ function summarize(plan: RenderPlan, apply: boolean) {
   console.log(`  action:       ${actionLabel[plan.changeType]}`);
   console.log(`  block lines:  ${blockLines}`);
   console.log(`  total lines:  ${lines}`);
-  if (plan.preservedLines > 0) {
-    console.log(`  preserved:    ${plan.preservedLines} lines outside block`);
-  }
-}
-
-async function persistRendered(plan: RenderPlan) {
-  if (!existsSync(RENDERED_DIR)) {
-    await mkdir(RENDERED_DIR, { recursive: true });
-  }
-  const out = join(RENDERED_DIR, `${plan.targetName}.md`);
-  await writeFile(out, plan.finalContent, "utf8");
-}
-
-async function applyPlan(plan: RenderPlan) {
-  if (plan.changeType === "noop") return;
-  const dir = dirname(plan.destinationResolved);
-  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
-  await writeFile(plan.destinationResolved, plan.finalContent, "utf8");
-}
-
-// ── Per-fragment rendering (Cursor .mdc) ─────────────────────────────────────
-
-const FRAGMENT_MARKER_PREFIX = `<!-- gentle-ai-overlay:${BLOCK_NAME} fragment=`;
-
-interface FileOp {
-  kind: "create" | "update" | "delete";
-  path: string;
-  content?: string;
-  fragmentRef?: string;
-}
-
-interface PerFragmentPlan {
-  targetName: string;
-  target: TargetSpec;
-  profile: ProfileSpec;
-  destinationDir: string;
-  operations: FileOp[];
+  if (plan.preservedLines > 0) console.log(`  preserved:    ${plan.preservedLines} lines outside block`);
 }
 
 function slugify(ref: string): string {
   return ref.replace(/\//g, "-");
 }
 
-function projectFrontmatterToMdc(
-  meta: Record<string, unknown>,
-  body: string,
-): Record<string, unknown> {
+function projectFrontmatterToMdc(meta: Record<string, unknown>, body: string): Record<string, unknown> {
   const mdc: Record<string, unknown> = {};
   if (typeof meta.description === "string") mdc.description = meta.description;
-  else {
-    const heading = /^#\s+(.+)/m.exec(body);
-    if (heading) mdc.description = heading[1];
-  }
+  else mdc.description = /^#\s+(.+)/m.exec(body)?.[1];
   if (meta.globs !== undefined) mdc.globs = meta.globs;
   mdc.alwaysApply = meta.alwaysApply === true;
   return mdc;
 }
 
-function composeMdcContent(
-  ref: string,
-  mdcFrontmatter: Record<string, unknown>,
-  body: string,
-): string {
-  const fmLines = Object.entries(mdcFrontmatter).map(([k, v]) => {
-    if (typeof v === "boolean") return `${k}: ${v}`;
-    if (Array.isArray(v)) return `${k}: ${JSON.stringify(v)}`;
-    return `${k}: "${v}"`;
-  });
-  const fm = `---\n${fmLines.join("\n")}\n---`;
+function composeMdcContent(ref: string, frontmatter: Record<string, unknown>, body: string): string {
+  const lines = Object.entries(frontmatter)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => {
+      if (typeof value === "boolean") return `${key}: ${value}`;
+      if (Array.isArray(value)) return `${key}: ${JSON.stringify(value)}`;
+      return `${key}: "${value}"`;
+    });
   const marker = `${FRAGMENT_MARKER_PREFIX}${ref} -->`;
-  return `${fm}\n${marker}\n${body.trim()}\n`;
+  return `---\n${lines.join("\n")}\n---\n${marker}\n${body.trim()}\n`;
 }
 
-async function planPerFragmentTarget(
-  name: string,
-  target: TargetSpec,
-  args: string[],
-): Promise<PerFragmentPlan | null> {
-  const profile = await loadProfile(target.profile);
-  const destinationDir = resolvePath(target.destination);
+async function planPerFragmentTarget(name: string, target: TargetSpec, args: string[]): Promise<PerFragmentPlan | null> {
+  const profile = await loadProfile(PATHS, target.profile);
+  const destinationDir = resolveUserPath(target.destination);
 
-  // Self-write guard (same logic as block-based targets).
   if (target.destination.startsWith("./") && isGentlesmithRepo(process.cwd()) && !args.includes("--force")) {
     console.log(`\n━━━ target: ${name} (agent=${target.agent}, mode=per-fragment) ━━━`);
-    console.warn(`  SKIPPED — running inside gentlesmith repo (use --force to override)`);
+    console.warn("  SKIPPED — running inside gentlesmith repo (use --force to override)");
     return null;
   }
 
-  const desiredFiles = new Map<string, { content: string; ref: string }>();
-
+  const desiredFiles = new Map<string, string>();
   for (const ref of profile.include) {
-    const localPath = join(FRAGMENTS_LOCAL_DIR, `${ref}.md`);
-    const repoPath = join(FRAGMENTS_DIR, `${ref}.md`);
-    const path = existsSync(localPath) ? localPath : repoPath;
-    if (!existsSync(path)) {
-      throw new Error(`Fragment not found: ${ref} (looked at ${localPath} and ${repoPath})`);
-    }
+    if (ref.includes("..")) throw new Error(`Fragment ref must not contain "..": ${ref}`);
+    const path = resolveFragmentPath(PATHS, ref);
+    if (!existsSync(path)) throw new Error(`Fragment not found: ${ref}`);
     const raw = await readFile(path, "utf8");
     const { meta, body } = parseFrontmatter(raw);
 
-    // Scope filter.
     if (meta.scope !== undefined && meta.scope !== null) {
       const scopes = Array.isArray(meta.scope) ? meta.scope : [meta.scope];
       if (!scopes.includes(target.agent)) continue;
     }
 
     const content = body.trim();
-    if (content.length === 0) continue;
-
-    if (content.length > 10000) {
-      console.warn(`  WARNING: fragment ${ref} exceeds 10000 chars (${content.length}) — Cursor may truncate`);
-    }
-
-    const mdcFm = projectFrontmatterToMdc(meta, content);
-    const mdcContent = composeMdcContent(ref, mdcFm, content);
-    const slug = slugify(ref);
-    desiredFiles.set(join(destinationDir, `${slug}.mdc`), { content: mdcContent, ref });
+    if (!content) continue;
+    desiredFiles.set(join(destinationDir, `${slugify(ref)}.mdc`), composeMdcContent(ref, projectFrontmatterToMdc(meta, content), content));
   }
 
-  // Detect stale files: existing .mdc with our marker that are no longer in the desired set.
-  const operations: FileOp[] = [];
-  for (const [filePath, { content, ref }] of desiredFiles) {
-    if (!existsSync(filePath)) {
-      operations.push({ kind: "create", path: filePath, content, fragmentRef: ref });
-    } else {
-      const existing = await readFile(filePath, "utf8");
-      if (existing !== content) {
-        operations.push({ kind: "update", path: filePath, content, fragmentRef: ref });
-      }
-    }
+  const operations: PerFragmentPlan["operations"] = [];
+  for (const [filePath, content] of desiredFiles) {
+    if (!existsSync(filePath)) operations.push({ kind: "create", path: filePath, content });
+    else if (await readFile(filePath, "utf8") !== content) operations.push({ kind: "update", path: filePath, content });
   }
 
-  // Stale cleanup: only delete .mdc files that contain our marker.
   if (existsSync(destinationDir)) {
-    const existingFiles = (await readdir(destinationDir)).filter((f) => f.endsWith(".mdc"));
-    for (const f of existingFiles) {
-      const fullPath = join(destinationDir, f);
+    const existingFiles = (await readdir(destinationDir)).filter((file) => file.endsWith(".mdc"));
+    for (const file of existingFiles) {
+      const fullPath = join(destinationDir, file);
       if (desiredFiles.has(fullPath)) continue;
       const content = await readFile(fullPath, "utf8");
-      if (content.includes(FRAGMENT_MARKER_PREFIX)) {
-        operations.push({ kind: "delete", path: fullPath });
-      }
+      if (content.includes(FRAGMENT_MARKER_PREFIX)) operations.push({ kind: "delete", path: fullPath });
     }
   }
 
@@ -422,17 +279,16 @@ async function planPerFragmentTarget(
 
 function summarizePerFragment(plan: PerFragmentPlan, apply: boolean) {
   const verb = apply ? "WRITE" : "WOULD";
-  const creates = plan.operations.filter((o) => o.kind === "create");
-  const updates = plan.operations.filter((o) => o.kind === "update");
-  const deletes = plan.operations.filter((o) => o.kind === "delete");
+  const creates = plan.operations.filter((op) => op.kind === "create");
+  const updates = plan.operations.filter((op) => op.kind === "update");
+  const deletes = plan.operations.filter((op) => op.kind === "delete");
 
   console.log(`\n━━━ target: ${plan.targetName} (agent=${plan.target.agent}, mode=per-fragment) ━━━`);
   console.log(`  profile:      ${plan.profile.name}`);
   console.log(`  destination:  ${plan.destinationDir}`);
   console.log(`  fragments:    ${plan.profile.include.length} included`);
-
   if (plan.operations.length === 0) {
-    console.log(`  action:       NO CHANGES`);
+    console.log("  action:       NO CHANGES");
     return;
   }
 
@@ -442,115 +298,93 @@ function summarizePerFragment(plan: PerFragmentPlan, apply: boolean) {
   for (const op of deletes) console.log(`    - ${op.path.split("/").pop()}  (delete — stale)`);
 }
 
-async function applyPerFragmentPlan(plan: PerFragmentPlan): Promise<void> {
+async function persistRendered(plan: RenderPlan) {
+  await writeRuntimeFile(join(PATHS.renderedDir, `${plan.targetName}.md`), plan.finalContent);
+}
+
+async function applyPlan(plan: RenderPlan) {
+  if (plan.changeType === "noop") return;
+  await mkdir(dirname(plan.destinationResolved), { recursive: true });
+  await writeFile(plan.destinationResolved, plan.finalContent, "utf8");
+}
+
+async function applyPerFragmentPlan(plan: PerFragmentPlan) {
   if (plan.operations.length === 0) return;
   await mkdir(plan.destinationDir, { recursive: true });
   for (const op of plan.operations) {
-    if (op.kind === "delete") {
-      await unlink(op.path);
-    } else {
-      await writeFile(op.path, op.content!, "utf8");
-    }
+    if (op.kind === "delete") await unlink(op.path);
+    else await writeFile(op.path, op.content!, "utf8");
   }
 }
 
-/**
- * Self-updater — pulls latest from git and reinstalls deps.
- * Only works when running from a git clone (not from a global npm install).
- */
 function runUpdate(): void {
-  if (!existsSync(join(ROOT, ".git"))) {
+  if (!existsSync(join(PACKAGE_ROOT, ".git"))) {
     console.error("ERROR: gentlesmith was not installed via git clone — cannot self-update.");
-    console.error("To update a global npm install: npm update -g gentlesmith");
+    console.error("To update a global install: bun add -g gentlesmith");
     process.exit(1);
   }
 
-  console.log(`gentlesmith — UPDATE (repo: ${ROOT})\n`);
-
+  console.log(`gentlesmith — UPDATE (repo: ${PACKAGE_ROOT})\n`);
   console.log("→ git pull");
-  const pull = spawnSync("git", ["pull"], { cwd: ROOT, stdio: "inherit" });
-  if (pull.status !== 0) {
-    console.error("ERROR: git pull failed.");
-    process.exit(pull.status ?? 1);
-  }
+  const pull = spawnSync("git", ["pull"], { cwd: PACKAGE_ROOT, stdio: "inherit" });
+  if (pull.status !== 0) process.exit(pull.status ?? 1);
 
   console.log("\n→ bun install");
-  const install = spawnSync("bun", ["install"], { cwd: ROOT, stdio: "inherit" });
-  if (install.status !== 0) {
-    console.error("ERROR: bun install failed.");
-    process.exit(install.status ?? 1);
-  }
-
+  const install = spawnSync("bun", ["install"], { cwd: PACKAGE_ROOT, stdio: "inherit" });
+  if (install.status !== 0) process.exit(install.status ?? 1);
   console.log("\ngentlesmith updated.");
 }
 
-/**
- * Skills bridge — Level 3 manifest.
- * Profiles can declare `skills: [pkg, ...]`. On --apply, we delegate install
- * to Vercel's `npx skills` (already mature, 50+ agents). We never replicate
- * its registry; we only forward declared packages.
- */
-function invokeSkillsBridge(skills: string[], apply: boolean): void {
-  const unique = Array.from(new Set(skills.filter((s) => typeof s === "string" && s.trim().length > 0)));
+function invokeSkillsBridge(skills: string[], apply: boolean) {
+  const unique = Array.from(new Set(skills.filter((skill) => typeof skill === "string" && skill.trim().length > 0)));
   if (unique.length === 0) return;
 
   console.log(`\n━━━ skills-bridge (${unique.length} declared) ━━━`);
-
   if (!apply) {
-    for (const pkg of unique) console.log(`  would install: ${pkg}`);
+    for (const skill of unique) console.log(`  would install: ${skill}`);
     console.log("  (dry-run — re-run with --apply to invoke npx skills add)");
     return;
   }
 
-  // Probe for `npx skills` availability with a no-op call.
-  const probe = spawnSync("npx", ["--no-install", "skills", "--version"], { stdio: "ignore" });
+  const probe = spawnSync("npx", ["--yes", "skills", "--version"], { stdio: "ignore" });
   if (probe.error || probe.status !== 0) {
     console.warn("  WARNING: `npx skills` not available — skipping skills-bridge.");
-    console.warn("  Install via: npm i -g skills  (https://skills.sh)");
+    console.warn("  See https://skills.sh");
     return;
   }
 
-  for (const pkg of unique) {
-    console.log(`  installing: ${pkg}`);
-    const result = spawnSync("npx", ["skills", "add", pkg], { stdio: "inherit" });
-    if (result.status !== 0) {
-      console.warn(`  WARNING: failed to install ${pkg} (continuing).`);
-    }
+  for (const skill of unique) {
+    console.log(`  installing globally: ${skill}`);
+    const result = spawnSync("npx", ["--yes", "skills", "add", "-g", skill], { stdio: "inherit" });
+    if (result.status !== 0) console.warn(`  WARNING: failed to install ${skill} (continuing).`);
   }
 }
 
-async function main() {
-  // Subcommand dispatch — must be first, before any flag parsing.
-  if (process.argv[2] === "init") {
-    const { runWizard } = await import("./init.ts");
-    await runWizard();
-    process.exit(0);
-  }
-  if (process.argv[2] === "add") {
-    const { runAdd } = await import("./add.ts");
-    await runAdd(process.argv.slice(3));
-    process.exit(0);
-  }
-  if (process.argv[2] === "browse") {
-    const { runBrowse } = await import("./browse.ts");
-    await runBrowse();
-    process.exit(0);
-  }
-  if (process.argv[2] === "update") {
-    runUpdate();
-    process.exit(0);
-  }
+async function runSync(rawArgs: string[], legacyCompat = false) {
+  await ensureRuntimeState(PATHS);
 
-  const args = process.argv.slice(2);
+  const args = [...rawArgs];
   const apply = args.includes("--apply");
   const targetIdx = args.indexOf("--target");
   const filter = targetIdx >= 0 ? args[targetIdx + 1] : undefined;
 
-  console.log(`gentlesmith — ${apply ? "APPLY" : "DRY-RUN"}${filter ? ` (target=${filter})` : ""}`);
+  if (legacyCompat) {
+    console.log("NOTE: `gentlesmith --apply` is deprecated. Prefer `gentlesmith sync --apply`.");
+  }
 
-  const targets = await loadAllTargets(filter);
+  console.log(`gentlesmith — ${apply ? "APPLY" : "DRY-RUN"}${filter ? ` (target=${filter})` : ""}`);
+  const targets = await loadInstalledTargetsFiltered(filter);
   if (targets.length === 0) {
-    console.log("No targets found.");
+    if (filter) {
+      const installed = (await listInstalledTargets(PATHS)).find((target) => target.name === filter);
+      if (installed?.spec.enabled === false) {
+        console.log(`Target is installed but disabled: ${filter}. Use \`gentlesmith target enable ${filter}\`.`);
+        return;
+      }
+      console.log(`Target not installed: ${filter}. Use \`gentlesmith target add <template>\` or \`gentlesmith target list\`.`);
+      return;
+    }
+    console.log("No installed targets found. Use `gentlesmith init`, `gentlesmith target add <template>`, or `gentlesmith migrate`.");
     return;
   }
 
@@ -558,7 +392,14 @@ async function main() {
   const seenProfiles = new Set<string>();
 
   for (const { name, spec } of targets) {
-    if (spec.mode === "per-fragment") {
+    if (spec.mode === "opencode-agent") {
+      const profile = await loadProfile(PATHS, spec.profile);
+      const composed = await composeFragments(profile, spec.agent);
+      const plan = await planOpenCodeProfileAgent(spec.destination, profile, composed);
+      summarizeOpenCodeAgentPlan(plan, apply);
+      await writeRuntimeFile(join(PATHS.renderedDir, `${name}.md`), composed);
+      if (apply) await applyOpenCodeAgentPlan(plan);
+    } else if (spec.mode === "per-fragment") {
       const plan = await planPerFragmentTarget(name, spec, args);
       if (!plan) continue;
       summarizePerFragment(plan, apply);
@@ -571,21 +412,116 @@ async function main() {
       if (apply) await applyPlan(plan);
     }
 
-    // Collect skills once per profile (multiple targets may share a profile).
     if (!seenProfiles.has(spec.profile)) {
       seenProfiles.add(spec.profile);
-      const profile = await loadProfile(spec.profile);
+      const profile = await loadProfile(PATHS, spec.profile);
       if (Array.isArray(profile.skills)) collectedSkills.push(...profile.skills);
     }
   }
 
   invokeSkillsBridge(collectedSkills, apply);
+  console.log(`\nRendered previews saved to: ${PATHS.renderedDir}`);
+  if (!apply) console.log("Re-run with `gentlesmith sync --apply` to write changes.");
+}
 
-  console.log(`\nRendered previews saved to: ${RENDERED_DIR}`);
-  if (!apply) console.log("Re-run with --apply to write changes.");
+function printUsage(): void {
+  console.log(`gentlesmith — compose local AI-agent behavior from fragments
+
+Usage:
+  gentlesmith forge              bootstrap if needed, then start LLM-led profile forging
+  gentlesmith browse             inspect, edit, and apply profiles from the TUI
+
+Advanced:
+  gentlesmith init               deterministic runtime bootstrap
+  gentlesmith sync [--apply] [--target <name>]
+  gentlesmith export [--profile <profile>] [--out <dir>]
+  gentlesmith target <list|add|set-profile|enable|disable|remove|purge> [name]
+  gentlesmith skills <list|add|install|find>
+  gentlesmith preset list
+  gentlesmith preset add <name> [--profile <profile>]
+  gentlesmith migrate
+  gentlesmith update
+`);
+}
+
+async function runMigrate(): Promise<void> {
+  const before = new Set((await listInstalledTargets(PATHS)).map((target) => target.name));
+  const report = await migrateRuntimeState(PATHS);
+  const after = await listInstalledTargets(PATHS);
+  const added = after.map((target) => target.name).filter((name) => !before.has(name));
+
+  if (report.alreadyMigrated) {
+    console.log("Runtime migration already completed.");
+    return;
+  }
+
+  console.log("Runtime migration completed.");
+  if (added.length > 0) {
+    console.log("Installed targets detected from existing overlays:");
+    for (const name of added) console.log("  " + name);
+  }
+}
+
+async function main() {
+  const [command, ...rest] = process.argv.slice(2);
+
+  if (!command || command === "help" || command === "--help" || command === "-h") {
+    printUsage();
+    return;
+  }
+  if (command === "init") {
+    const { runWizard } = await import("./init");
+    await runWizard();
+    return;
+  }
+  if (command === "forge") {
+    const { runForge } = await import("./forge");
+    await runForge(rest);
+    return;
+  }
+  if (command === "preset") {
+    const { runPreset } = await import("./add");
+    await runPreset(rest);
+    return;
+  }
+  if (command === "skills") {
+    const { runSkills } = await import("./skills");
+    await runSkills(rest);
+    return;
+  }
+  if (command === "browse") {
+    const { runBrowse } = await import("./browse");
+    await runBrowse();
+    return;
+  }
+  if (command === "migrate") {
+    await runMigrate();
+    return;
+  }
+  if (command === "update") {
+    runUpdate();
+    return;
+  }
+  if (command === "target") {
+    await runTarget(rest);
+    return;
+  }
+  if (command === "sync") {
+    await runSync(rest);
+    return;
+  }
+  if (command === "export") {
+    const { runExport } = await import("./export");
+    await runExport(rest);
+    return;
+  }
+
+  console.error(`Unknown command: ${command}`);
+  printUsage();
+  process.exit(1);
 }
 
 main().catch((err) => {
-  console.error("ERROR:", err.message);
+  console.error("ERROR:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

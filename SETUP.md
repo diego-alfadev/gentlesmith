@@ -18,11 +18,49 @@ Cross-platform setup guide for **macOS / Linux / Windows**.
 git clone <this-repo-url> gentlesmith
 cd gentlesmith
 bun install
+bun link
 ```
 
-## Step 2 — Create your local env files
+## Step 2 — Forge your local profile
 
-These files live in your home directory. **Never commit them.**
+```bash
+gentlesmith forge
+```
+
+`forge` bootstraps `~/.gentlesmith` if needed, discovers gentle-ai/OpenCode/Engram/Context7/skills, and prints an LLM handoff for profile refinement.
+
+If you only want deterministic bootstrap:
+
+```bash
+gentlesmith init
+```
+
+Manual deterministic forge fallback:
+
+```bash
+gentlesmith forge --manual
+```
+
+## Step 3 — Browse, dry-run & apply
+
+```bash
+gentlesmith sync              # dry-run — see what would change
+gentlesmith export            # rendered prompts + diffs in a sandbox folder
+gentlesmith sync --apply      # write changes to target files
+```
+
+Check previews in `~/.gentlesmith/.last-rendered/` before applying.
+
+`sync` renders installed targets. To use another profile for a target:
+
+```bash
+gentlesmith target set-profile claude local-yourname
+gentlesmith sync --target claude
+```
+
+## Optional local env files
+
+Use this only if you want agents to read local constants, aliases, or machine context. These files live in your home directory. **Never commit them.**
 
 ### macOS / Linux
 
@@ -57,15 +95,15 @@ if (Test-Path "$HOME/.secrets.agents") { Get-Content "$HOME/.secrets.agents" | F
 # if (Test-Path "$HOME/.secrets") { ... }
 ```
 
-## Step 3 — Configure your secrets
+## Optional agent-readable constants
 
-Edit `~/.secrets.agents` and add what your agents need:
+Edit `~/.secrets.agents` only for values your agents genuinely need:
 
 ```bash
-# ~/.secrets.agents — examples (use your own values)
-export COOLIFY_URL="https://your-coolify-instance.com"
-export COOLIFY_TOKEN="your-token-here"
-export SOME_API_KEY="..."
+# ~/.secrets.agents — examples, replace with your own values
+export DEPLOY_URL="https://deploy.example.com"
+export DEPLOY_TOKEN="your-token-here"
+export SOME_SERVICE_API_KEY="..."
 
 # SSH hosts as aliases (macOS/Linux)
 # alias myserver='ssh user@my-ip'
@@ -76,24 +114,32 @@ export SSH_HOST_PROD="user@ip"
 
 Windows users: same file, same syntax — agents can parse `export KEY=VALUE` lines cross-platform.
 
-## Step 4 — Choose your profile
+## Profiles
 
-Profiles are in `profiles/`:
+Built-in profile templates are in `profiles/`; machine-local profiles live in `~/.gentlesmith/profiles/`:
 
 | Profile | What it includes | Use case |
 |---------|-----------------|----------|
-| `jarvis` | Full — persona + rules + env context | Your daily driver |
-| `surgical` | Minimal — rules only, no persona/env | CI, sensitive repos, focused tasks |
+| `jarvis` | Jarvis-inspired persona + standard developer rules | Daily driver baseline |
+| `surgical` | Minimal rules only, no persona/env/toolchain assumptions | CI, sensitive repos, focused tasks |
 
-To create your own persona, copy a fragment:
+To create your own persona for this machine, prefer:
+
 ```bash
-cp fragments/persona/jarvis.md fragments/persona/my-persona.md
-# Edit it, then add it to a new profile in profiles/
+gentlesmith forge
 ```
 
-## Step 5 — Configure targets
+Or edit runtime-home manually:
 
-Targets map profiles to destination files. Edit `targets/claude.yaml`:
+```bash
+mkdir -p ~/.gentlesmith/fragments-local/persona
+cp fragments/persona/jarvis.md ~/.gentlesmith/fragments-local/persona/my-persona.md
+# Edit it, then reference persona/my-persona from ~/.gentlesmith/profiles/<your-profile>.yaml
+```
+
+## Targets
+
+Target templates live in `targets/`; installed machine-local targets live in `~/.gentlesmith/targets/`. Example installed target:
 
 ```yaml
 agent: claude
@@ -103,40 +149,30 @@ destination: ~/.claude/CLAUDE.md   # macOS/Linux
 mode: prepend
 ```
 
-Windows note: `distribute.ts` converts `~` automatically via `os.homedir()`, so `~/.claude/CLAUDE.md` works on Windows too.
+OpenCode selectable profiles use:
 
-## Step 6 — Dry-run & apply
-
-```bash
-bun run distribute              # dry-run — see what would change
-bun run distribute --apply      # write changes to target files
+```yaml
+agent: opencode
+profile: local-yourname
+destination: ~/.config/opencode/opencode.json
+mode: opencode-agent
 ```
 
-Check previews in `.last-rendered/` before applying.
+gentlesmith only writes `agent.gentlesmith-*` keys in OpenCode config.
 
-## Step 7 — Verify
+Windows note: gentlesmith resolves `~` via the user home directory, so `~/.claude/CLAUDE.md` works cross-platform.
+
+If you previously used an older repo-local setup and want to import detected overlays:
+
+```bash
+gentlesmith migrate
+```
+
+## Verify
 
 Open your agent (Claude Desktop, etc.) and check the system prompt includes your fragments.
 
 ---
-
-## Custom personas quick-start
-
-To create "Jotaro" (JoJo) or "Wolf of Wall Street" persona:
-
-1. Create `fragments/persona/jotaro.md` with your persona definition
-2. Create `profiles/jotaro.yaml`:
-   ```yaml
-   name: jotaro
-   description: JoJo's Bizarre Adventure persona — direct, stoic, references stands.
-   include:
-     - persona/jotaro
-     - rules/safety
-     - rules/workflow
-     - rules/commits
-   ```
-3. Create `targets/jotaro-claude.yaml` pointing to your agent's config file
-4. Run `bun run distribute --apply --target jotaro-claude`
 
 ## Troubleshooting
 

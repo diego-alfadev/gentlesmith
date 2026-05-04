@@ -35,9 +35,9 @@ Only write a comment when the WHY is non-obvious: a hidden constraint, a subtle 
 
 If you touch frontend, don't say "done" without testing in a browser. Type-check doesn't guarantee the feature works. If you can't test (tools unavailable), say so explicitly — don't assume.
 
-## Check Context7 before assuming APIs
+## Check current docs before assuming APIs
 
-For libraries or frameworks, check Context7 MCP before asserting behavior or syntax. APIs change; your knowledge has a cutoff. Verify.
+For libraries or frameworks, check the available documentation source before asserting behavior or syntax. APIs change; your knowledge has a cutoff. Verify.
 
 ## Your own errors
 

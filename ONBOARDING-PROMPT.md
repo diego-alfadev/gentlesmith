@@ -19,10 +19,10 @@ Then guide me through a short discovery interview (one topic at a time, max 2 qu
 After each answer, confirm what you understood before moving on.
 
 When the interview is done, you will:
-1. Write my personalized fragments to the fragments/ directory
-2. Create or update targets/<agent>.yaml for each agent I use
-3. Run `bun run distribute --dry-run` and show me the summary
-4. Ask for confirmation, then run `bun run distribute --apply`
+1. Write my personalized fragments to `~/.gentlesmith/fragments-local/`
+2. Create or update installed targets under `~/.gentlesmith/targets/`
+3. Run `gentlesmith sync` and show me the summary
+4. Ask for confirmation, then run `gentlesmith sync --apply`
 
 Here are the topics to cover:
 
@@ -41,7 +41,7 @@ Here are the topics to cover:
 - OS: macOS, Linux, or Windows?
 - Main language/runtime: Node/Bun, Python/uv, Go, other?
 - Container tool: OrbStack, Docker Desktop, Rancher, none?
-- Do you use any deployment platforms? (Coolify, Vercel, Fly.io, AWS, etc.)
+- Do you use any deployment platforms? (self-hosted PaaS, Vercel, Fly.io, AWS, etc.)
 - Any recurring SSH hosts or services I should know about?
 
 --- AGENTS ---
@@ -62,7 +62,7 @@ Once your agent has applied the configuration, verify it worked:
 grep -n "gentle-ai-overlay:gentlesmith\|fragment:" ~/.claude/CLAUDE.md   # or your agent's config file
 
 # Re-run anytime you update fragments
-bun run distribute --apply
+gentlesmith sync --apply
 ```
 
-To add a new agent later: create `targets/<agent>.yaml` and run `distribute --apply --target <agent>`.
+To add a new agent later: add a target template, install it with `gentlesmith target add <name>`, then run `gentlesmith sync --apply --target <name>`.

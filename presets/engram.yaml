@@ -1,0 +1,3 @@
+description: "Engram integration hints — enabled automatically when discovery detects Engram"
+include:
+  - integrations/engram

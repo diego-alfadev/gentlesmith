@@ -3,7 +3,8 @@ node_modules/
 *.log
 .DS_Store
 
-# Personal overrides — never commit. Distribute prefers these over fragments/ when present.
+# Legacy repo-local overrides — kept gitignored for migration/dev only.
+# Runtime-home state now lives under ~/.gentlesmith instead of this repo.
 fragments-local/
 profiles/local-*.yaml
 targets/local-*.yaml

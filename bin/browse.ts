@@ -3,7 +3,7 @@
  * gentlesmith browse — interactive TUI for exploring and managing profiles
  */
 
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -61,6 +61,13 @@ interface TargetInfo {
   destination: string;
   mode: string;
   enabled: boolean;
+}
+
+interface BundleInfo {
+  kind: "forge" | "patch";
+  name: string;
+  path: string;
+  mtime: number;
 }
 
 function clear() {
@@ -665,10 +672,97 @@ async function applyNow() {
 }
 
 async function forgeProfile() {
-  banner("Forge");
+  banner("Create / Forge Profile");
   spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "forge"], { stdio: "inherit" });
   console.log("");
   await pause();
+}
+
+async function improveProfile() {
+  banner("Improve Profile");
+  const profiles = (await loadProfiles()).filter((profile) => profile.isLocal);
+  if (profiles.length === 0) {
+    console.log("  No local profiles found. Run forge first.\n");
+    await pause();
+    return;
+  }
+
+  const profileName = await select({
+    message: "Profile to improve:",
+    choices: profiles.map((profile) => ({
+      name: `${profile.name}${profile.description ? ` — ${profile.description}` : ""}`,
+      value: profile.name,
+    })),
+  });
+
+  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "forge", "--profile", profileName], { stdio: "inherit" });
+  console.log("");
+  await pause();
+}
+
+async function patchProfile() {
+  banner("Patch Profile");
+  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "patch"], { stdio: "inherit" });
+  console.log("");
+  await pause();
+}
+
+async function reviewPendingBundle() {
+  banner("Review Pending Bundle");
+  const bundles = await listWorkbenchBundles();
+  if (bundles.length === 0) {
+    console.log("  No forge/patch bundles found yet.\n");
+    console.log(`  ${c.dim("Run `gentlesmith forge` or `gentlesmith patch` first.")}\n`);
+    await pause();
+    return;
+  }
+
+  const picked = await select({
+    message: "Bundle to open:",
+    choices: [
+      ...bundles.map((bundle) => ({
+        name: `${bundle.kind.padEnd(5)}  ${bundle.name}`,
+        value: bundle.path,
+      })),
+      { name: "Back", value: "__back" },
+    ],
+  });
+  if (picked === "__back") return;
+
+  const handoff = join(picked, "handoff.md");
+  const context = join(picked, "context.json");
+  if (!openPathsInCode([picked, handoff, context].filter((path) => existsSync(path)))) {
+    openPathInEditor(picked, "folder");
+  }
+  console.log(`\n  ${c.green("✓")} Opened bundle workspace.`);
+  console.log(`  ${c.dim(picked)}\n`);
+  await pause();
+}
+
+async function listWorkbenchBundles(): Promise<BundleInfo[]> {
+  const roots: Array<{ kind: BundleInfo["kind"]; path: string }> = [
+    { kind: "forge", path: join(PATHS.runtimeHome, "forges") },
+    { kind: "patch", path: join(PATHS.runtimeHome, "patches") },
+  ];
+  const bundles: BundleInfo[] = [];
+
+  for (const root of roots) {
+    if (!existsSync(root.path)) continue;
+    const entries = await readdir(root.path, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const bundlePath = join(root.path, entry.name);
+      if (!existsSync(join(bundlePath, "handoff.md"))) continue;
+      bundles.push({
+        kind: root.kind,
+        name: entry.name,
+        path: bundlePath,
+        mtime: (await stat(bundlePath)).mtimeMs,
+      });
+    }
+  }
+
+  return bundles.sort((a, b) => b.mtime - a.mtime);
 }
 
 export async function runBrowse(): Promise<void> {
@@ -685,8 +779,12 @@ export async function runBrowse(): Promise<void> {
       action = await select({
         message: "What do you want to do?",
         choices: [
+          new Separator(c.dim("── workbench ──")),
+          { name: `${c.green("✦")} Create / forge profile`, value: "forge" },
+          { name: `${c.green("✦")} Improve existing profile`, value: "improve" },
+          { name: `${c.green("✦")} Patch from skill / markdown / idea`, value: "patch" },
+          { name: `${c.yellow("◈")} Review pending bundle`, value: "bundle" },
           new Separator(c.dim("── explore ──")),
-          { name: `${c.green("✦")} Forge profile`, value: "forge" },
           { name: `${c.cyan("◉")} Discovery snapshot`, value: "discovery" },
           { name: `${c.cyan("◉")} View fragments`, value: "fragments" },
           { name: `${c.cyan("◉")} View profiles`, value: "profiles" },
@@ -713,6 +811,9 @@ export async function runBrowse(): Promise<void> {
       switch (action) {
         case "fragments": await showFragments(); break;
         case "forge": await forgeProfile(); break;
+        case "improve": await improveProfile(); break;
+        case "patch": await patchProfile(); break;
+        case "bundle": await reviewPendingBundle(); break;
         case "discovery": await showDiscovery(); break;
         case "profiles": await showProfiles(); break;
         case "detail": await profileDetail(); break;

@@ -8,11 +8,24 @@ import type { ExitPromptError as ExitPromptErrorType } from "@inquirer/core";
 import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
 import {
   ensureRuntimeState,
+  listBuiltInProfiles,
   listLocalProfiles,
+  loadProfile,
   resolveRuntimePaths,
+  resolveUserPath,
+  type ProfileSpec,
 } from "./runtime";
 import { bootstrapRuntime } from "./init";
 import { discoverRuntime, summarizeDiscovery, type DiscoverySnapshot } from "./discovery";
+import {
+  buildForgeHandoff,
+  buildProfileWorkbenchContext,
+  buildWorkbenchReadme,
+  slugify,
+  timestamp,
+  writeProfileWorkbenchBundle,
+  type WorkbenchSourceMaterial,
+} from "./workbench";
 
 const PATHS = resolveRuntimePaths();
 
@@ -37,14 +50,38 @@ interface ProfileSelection {
   profile: ProfileDoc;
 }
 
+interface ForgeArgs {
+  name?: string;
+  from?: string;
+  profile?: string;
+  out?: string;
+  manual: boolean;
+}
+
+interface ForgeProfileChoice {
+  name: string;
+  path: string;
+  isLocal: boolean;
+}
+
+function parseForgeArgs(args: string[]): ForgeArgs {
+  return {
+    name: readFlag(args, "--name"),
+    from: readFlag(args, "--from"),
+    profile: readFlag(args, "--profile"),
+    out: readFlag(args, "--out"),
+    manual: args.includes("--manual") || args.includes("--local"),
+  };
+}
+
 export async function runForge(args = process.argv.slice(3)): Promise<void> {
   await ensureRuntimeState(PATHS);
   const bootstrap = await bootstrapRuntime(PATHS);
   const snapshot = bootstrap.snapshot ?? await discoverRuntime(PATHS);
+  const parsed = parseForgeArgs(args);
 
-  const manual = args.includes("--manual") || args.includes("--local");
-  if (!manual) {
-    printForgePrompt(snapshot, bootstrap.profileName);
+  if (!parsed.manual) {
+    await writeForgeBundle(parsed, snapshot, bootstrap.profileName);
     return;
   }
 
@@ -96,6 +133,109 @@ export async function runForge(args = process.argv.slice(3)): Promise<void> {
   console.log("  1. Review generated fragments in ~/.gentlesmith/fragments-local/");
   console.log("  2. Preview render: gentlesmith sync");
   console.log("  3. Apply render:   gentlesmith sync --apply");
+}
+
+async function writeForgeBundle(args: ForgeArgs, snapshot: DiscoverySnapshot, bootstrapProfileName: string): Promise<void> {
+  const baseProfileName = args.from ?? args.profile ?? bootstrapProfileName ?? "jarvis";
+  const profile = await resolveAnyProfile(baseProfileName);
+  const profileSpec = await loadProfile(PATHS, profile.name);
+  const targetProfileName = args.name
+    ? toLocalProfileName(args.name)
+    : profile.isLocal
+      ? profile.name
+      : `local-${slugify(profile.name)}`;
+  const intent = args.profile ? "improve-profile" : "create-profile";
+  const outDir = resolveUserPath(args.out ?? join(PATHS.runtimeHome, "forges", `${timestamp()}-${targetProfileName}`));
+  const sources = buildForgeSources(profile, profileSpec, snapshot, targetProfileName);
+  const context = buildProfileWorkbenchContext({
+    paths: PATHS,
+    outDir,
+    intent,
+    profile: { ...profile, spec: profileSpec },
+    sources,
+    level: "adapted",
+    discovery: summarizeDiscovery(snapshot),
+    targetProfileName,
+  });
+
+  await writeProfileWorkbenchBundle({
+    outDir,
+    context,
+    sources,
+    handoff: buildForgeHandoff(context),
+    readme: buildWorkbenchReadme(context),
+  });
+
+  console.log(`gentlesmith forge bundle written to: ${outDir}`);
+  console.log("");
+  console.log("Next:");
+  console.log(`  1. Give ${join(outDir, "handoff.md")} to your agent.`);
+  console.log(`  2. Let it create/refine ${targetProfileName} in ~/.gentlesmith.`);
+  console.log(`  3. Review with: gentlesmith export --profile ${targetProfileName}`);
+  console.log("  4. Apply only after review: gentlesmith sync --apply");
+}
+
+async function resolveAnyProfile(profileName: string): Promise<ForgeProfileChoice> {
+  const profiles = [
+    ...(await listLocalProfiles(PATHS)).map((profile) => ({ ...profile, isLocal: true })),
+    ...(await listBuiltInProfiles(PATHS)).map((profile) => ({ ...profile, isLocal: false })),
+  ];
+  const match = profiles.find((profile) => profile.name === profileName);
+  if (!match) {
+    console.error(`Profile not found: ${profileName}`);
+    console.error("Run `gentlesmith browse` or inspect profiles before forging from it.");
+    process.exit(1);
+  }
+  return match;
+}
+
+function buildForgeSources(
+  profile: ForgeProfileChoice,
+  profileSpec: ProfileSpec,
+  snapshot: DiscoverySnapshot,
+  targetProfileName: string,
+): WorkbenchSourceMaterial[] {
+  return [
+    {
+      type: "fragment",
+      name: `base-profile/${profile.name}`,
+      originalPath: profile.path,
+      bundleFile: `sources/base-profile-${slugify(profile.name)}.yaml`,
+      content: stringifyYAML(profileSpec),
+    },
+    {
+      type: "idea",
+      name: `forge-${targetProfileName}`,
+      bundleFile: "sources/forge-request.md",
+      content: [
+        "# Forge request",
+        "",
+        `Create or refine runtime-local profile \`${targetProfileName}\`.`,
+        `Base/current profile: \`${profile.name}\`.`,
+        "",
+        "Use discovery and existing env/toolchain context when useful.",
+        "Keep the result compact, developer-focused, and low-intrusion unless the user asks otherwise.",
+        "",
+      ].join("\n"),
+    },
+    {
+      type: "idea",
+      name: "discovery-summary",
+      bundleFile: "sources/discovery.md",
+      content: [
+        "# Discovery summary",
+        "",
+        ...summarizeDiscovery(snapshot).map((line) => `- ${line}`),
+        "",
+        "Recommended fragments:",
+        ...snapshot.recommendations.fragments.map((ref) => `- ${ref}`),
+        "",
+        "Recommended targets:",
+        ...snapshot.recommendations.targets.map((target) => `- ${target}`),
+        "",
+      ].join("\n"),
+    },
+  ];
 }
 
 async function buildForgePlan(): Promise<ForgePlan> {
@@ -312,6 +452,12 @@ function toSlug(value: string): string {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
+}
+
+function readFlag(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return undefined;
+  return args[idx + 1];
 }
 
 function formatRuntimePath(path: string): string {

@@ -9,6 +9,7 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 - [x] Local profiles can be bound to targets.
 - [x] `forge` exists.
 - [x] `forge` auto-bootstraps runtime state when needed.
+- [x] `forge` writes self-contained Workbench bundles by default.
 - [x] `init` is deterministic bootstrap, not a competing onboarding wizard.
 - [x] Discovery is internal via `DiscoverySnapshot`.
 - [x] README quickstart leads with `gentlesmith forge`.
@@ -33,6 +34,7 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 - [x] Skills are discovery/toggle/reference only.
 - [x] Skill builder is out of scope.
+- [x] Minimal L1 skill references use compact `references/<slug>` fragments.
 - [ ] Confirm skills.sh global storage and CLI behavior before deeper integration.
 - [ ] Decide whether skills should be installed by gentlesmith or delegated to gentle-ai when available.
 
@@ -49,5 +51,6 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 ## Later — Profile evaluation
 
-- [ ] Explore `gentlesmith patch` as a self-contained TUI/CLI flow for adapting installed skills or free-form ideas into profile fragments.
+- [x] Add `gentlesmith patch` CLI bundle flow for adapting installed skills or free-form ideas into profile fragments.
+- [ ] Add `gentlesmith patch` to Browse/TUI as a self-contained guided flow.
 - [ ] Explore profile benchmarking: run the same prompts against multiple profiles and compare behavior, friction, and token cost.

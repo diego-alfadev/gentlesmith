@@ -70,6 +70,7 @@ Primary:
 | Command | Purpose |
 |---|---|
 | `gentlesmith forge` | Bootstrap if needed, then start LLM-led profile forging |
+| `gentlesmith patch` | Create a self-contained patch bundle for profile changes |
 | `gentlesmith browse` | Inspect/edit profiles, fragments, skills, targets, and apply |
 
 Advanced:
@@ -103,13 +104,30 @@ Discovery drives recommended fragments, targets, and skill references. There is 
 
 Default `forge` is LLM-first.
 
-It does not invent its own model runtime. Instead it prepares a high-signal handoff with:
+It does not invent its own model runtime. Instead it prepares a self-contained Workbench bundle with:
 
 - current profile
 - detected tools and agents
 - recommended integration fragments
 - local skill roots
 - exact files the LLM should propose writing under `~/.gentlesmith`
+
+Examples:
+
+```bash
+gentlesmith forge --name local-debugger --from jarvis
+gentlesmith forge --profile local-diego
+```
+
+Default forge writes under:
+
+```text
+~/.gentlesmith/forges/<timestamp-profile>/
+├── handoff.md
+├── context.json
+├── README.md
+└── sources/
+```
 
 Manual deterministic fallback:
 
@@ -122,6 +140,26 @@ gentlesmith forge --manual
 Use this when you want to add a behavior tweak without risking your current agent setup.
 
 Example: adapt an installed skill such as `grill-me` into a lighter profile behavior.
+
+Guided bundle flow:
+
+```bash
+gentlesmith patch --profile local-diego --from-skill grill-me --level adapted
+```
+
+This writes:
+
+```text
+~/.gentlesmith/patches/<timestamp-slug>/
+├── handoff.md
+├── context.json
+├── README.md
+└── sources/
+```
+
+Give `handoff.md` to your agent. It contains enough Gentlesmith context to propose/write runtime-local fragments and profile edits without needing the repo cloned.
+
+Manual flow:
 
 ```bash
 # 1. Discover what exists
@@ -186,11 +224,13 @@ Keep the default profile lean. Add only the amount of behavior you actually want
 | Level | Use | Good for |
 |---|---|---|
 | Install-only | Discover it; invoke it manually when needed. | Large/specialized skills |
-| Reference | Tell the profile when to suggest it. | `think-through` for new projects, paradigm shifts, or rabbit-hole risk |
-| Adapted fragment | Extract a short behavior block. | Light `grill-me` behavior in `persona/learning-coach` |
+| Reference | Add compact `references/<slug>` when-to-use guidance. | `think-through` for new projects, paradigm shifts, or rabbit-hole risk |
+| Adapted fragment | Extract a short behavior block into persona/rules/workflows. | Light `grill-me` behavior in `persona/learning-coach` |
 | Embedded rule/persona | Make it part of the base contract. | Jarvis-style no-yes-man judgment |
 
 Default Gentlesmith built-ins are intentionally low-intrusion. Richer behavior should be opt-in through fragments or local profiles.
+
+For now, `skills:` stays a simple metadata/package list. Do not use structured skill objects yet; put durable when-to-use behavior in `references/` fragments.
 
 ## Coexistence with gentle-ai
 

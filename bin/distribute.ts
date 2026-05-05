@@ -429,10 +429,13 @@ function printUsage(): void {
 
 Usage:
   gentlesmith forge              bootstrap if needed, then start LLM-led profile forging
+  gentlesmith patch              create a self-contained profile patch bundle
   gentlesmith browse             inspect, edit, and apply profiles from the TUI
 
 Advanced:
   gentlesmith init               deterministic runtime bootstrap
+  gentlesmith forge --name <profile> --from <base>
+  gentlesmith forge --profile <profile>
   gentlesmith sync [--apply] [--target <name>]
   gentlesmith export [--profile <profile>] [--out <dir>]
   gentlesmith target <list|add|set-profile|enable|disable|remove|purge> [name]
@@ -477,6 +480,11 @@ async function main() {
   if (command === "forge") {
     const { runForge } = await import("./forge");
     await runForge(rest);
+    return;
+  }
+  if (command === "patch") {
+    const { runPatch } = await import("./patch");
+    await runPatch(rest);
     return;
   }
   if (command === "preset") {

@@ -16,6 +16,7 @@ This file defines what belongs in the package versus runtime-local state.
 | `persona/jarvis` | default | Product personality/homage; generic enough to ship. |
 | `persona/karpathy-guidelines` | default | Developer thinking principles; useful in the default baseline. |
 | `persona/learning-coach` | optional/example | Compact coaching layer for users who want examples-first learning and light gap detection. Not part of the default profile. |
+| `references/think-through` | optional/example | L1 when-to-use reference for high-uncertainty projects/features. Not part of the default profile. |
 | `rules/safety` | default | Core safety contract. |
 | `rules/workflow` | default | Core execution discipline. |
 | `rules/commits` | default | Common developer convention. |
@@ -50,9 +51,11 @@ Skill incorporation levels:
 | Level | Use | Example |
 |---|---|---|
 | Install-only | Skill exists and the user invokes it manually. | Deep tutor skills |
-| Reference | Profile knows when to suggest/use the skill. | `think-through` for uncertain new work |
+| Reference | Profile knows when to suggest/use the skill through a compact `references/<slug>` fragment. | `think-through` for uncertain new work |
 | Adapted fragment | Small durable behavior extracted from a skill. | `learning-coach` from `grill-me` |
 | Embedded rule/persona | Behavior becomes core identity. | Jarvis no-yes-man guardrails |
+
+Keep `skills:` as simple metadata/package list for now. Do not introduce structured skill objects until the reference model proves insufficient.
 
 ## Local-only
 

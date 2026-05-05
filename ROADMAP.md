@@ -10,9 +10,11 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 - [x] `forge` exists.
 - [x] `forge` auto-bootstraps runtime state when needed.
 - [x] `forge` writes self-contained Workbench bundles by default.
+- [x] `forge` can inherit an env baseline from local profiles or stay env-agnostic for portable profiles.
 - [x] `init` is deterministic bootstrap, not a competing onboarding wizard.
 - [x] Discovery is internal via `DiscoverySnapshot`.
 - [x] README quickstart leads with `gentlesmith forge`.
+- [x] Docs clarify multi-profile behavior: targets bind to profiles; profiles can exist without being synced.
 
 ## P1 — Gentle-ai and OpenCode alignment
 
@@ -47,11 +49,15 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 ## P5 — Plugin path
 
+- [x] Forge bundles include bridge-readiness context when gentle-ai is detected.
 - [ ] Define how gentle-ai should expose gentlesmith in its TUI.
+- [ ] Verify gentle-ai public plugin/bridge contract before implementing transport.
 - [ ] Decide whether OpenCode profile registration should eventually be delegated to gentle-ai.
 
 ## Later — Profile evaluation
 
 - [x] Add `gentlesmith patch` CLI bundle flow for adapting installed skills or free-form ideas into profile fragments.
+- [x] Make `gentlesmith export` produce catalogable profile specs with source fragments and target applicability.
 - [ ] Add `gentlesmith patch` to Browse/TUI as a self-contained guided flow.
+- [ ] Add local export comparison across two profile specs.
 - [ ] Explore profile benchmarking: run the same prompts against multiple profiles and compare behavior, friction, and token cost.

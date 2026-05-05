@@ -34,7 +34,7 @@ bun link
 gentlesmith forge
 ```
 
-`forge` bootstraps `~/.gentlesmith` if needed, discovers your local gentle-ai/toolchain context, and prints an LLM handoff to create or refine your profile.
+`forge` bootstraps `~/.gentlesmith` if needed, discovers your local gentle-ai/toolchain context, and writes a self-contained Workbench bundle to create or refine a profile.
 
 Then inspect/apply from the cockpit:
 
@@ -46,7 +46,7 @@ Or use the advanced CLI:
 
 ```bash
 gentlesmith sync          # dry-run render
-gentlesmith export        # write rendered prompts + diffs to a sandbox folder
+gentlesmith export        # write a catalogable profile export
 gentlesmith sync --apply  # write overlays / selectable profile entries
 ```
 
@@ -62,6 +62,13 @@ presets/                       ~/.gentlesmith/presets/
 ```
 
 Built-ins live in the installed package. Personal machine state lives in `~/.gentlesmith`.
+
+Gentlesmith is multi-profile by design:
+
+- you can forge many local profiles
+- targets choose which profile they render
+- `sync` applies the profiles currently bound to installed targets
+- a profile can be exported, catalogued, or used for sub-agents/framework agents without ever being synced into your main local agents
 
 ## Commands
 
@@ -79,7 +86,7 @@ Advanced:
 |---|---|
 | `gentlesmith init` | Deterministic runtime bootstrap only |
 | `gentlesmith sync [--apply]` | Preview or write installed targets |
-| `gentlesmith export [--profile <profile>]` | Export rendered prompts and diffs to a sandbox folder |
+| `gentlesmith export [--profile <profile>]` | Export a catalogable profile spec, sources, rendered prompts, and diffs |
 | `gentlesmith target ...` | Manage installed target definitions |
 | `gentlesmith preset ...` | Apply fragment bundles |
 | `gentlesmith skills ...` | Discover/list/reference skills; no skill builder |
@@ -100,6 +107,24 @@ gentlesmith builds an internal `DiscoverySnapshot` under the hood. It detects:
 
 Discovery drives recommended fragments, targets, and skill references. There is no separate public `gentlesmith gentle` namespace.
 
+## gentle-ai bridge status
+
+Gentlesmith is bridge-ready, not bridge-dependent.
+
+Today:
+
+- `forge`/`patch` produce self-contained bundles.
+- You can hand `handoff.md` to any coding agent manually.
+- If gentle-ai is detected, forge includes `sources/gentle-ai-bridge.md` explaining the current boundary.
+
+Not implemented yet:
+
+- no hidden gentle-ai plugin transport
+- no TUI tunneling into gentle-ai
+- no assumption that gentle-ai owns Gentlesmith state
+
+That keeps Gentlesmith usable standalone while leaving a clean path for a future gentle-ai TUI/plugin integration.
+
 ## Forge
 
 Default `forge` is LLM-first.
@@ -109,7 +134,9 @@ It does not invent its own model runtime. Instead it prepares a self-contained W
 - current profile
 - detected tools and agents
 - recommended integration fragments
-- local skill roots
+- reusable env baseline when available
+- local skill roots and L0-L3 skill incorporation guidance
+- gentle-ai bridge-readiness notes when gentle-ai is detected
 - exact files the LLM should propose writing under `~/.gentlesmith`
 
 Examples:
@@ -117,7 +144,15 @@ Examples:
 ```bash
 gentlesmith forge --name local-debugger --from jarvis
 gentlesmith forge --profile local-diego
+gentlesmith forge --name local-reviewer --from jarvis --env-from local-diego
+gentlesmith forge --name mastra-worker --from surgical --env agnostic
 ```
+
+Env behavior:
+
+- default `--env inherit` preserves useful `env/*` fragments from an existing local profile when forging variants
+- `--env-from <profile>` chooses the profile that provides that baseline
+- `--env agnostic` keeps the forged profile portable for orchestrators, sub-agents, framework agents, or catalogued exports
 
 Default forge writes under:
 
@@ -186,6 +221,25 @@ Rule of thumb:
 - Prefer local fragments for machine/user-specific taste.
 - Use `export` whenever a change affects an existing profile.
 
+## Catalogued exports
+
+`export` is not only for your active local targets. It writes a reviewable profile package that can be shared, compared, or used as the seed for future catalog/marketplace workflows.
+
+```bash
+gentlesmith export --profile local-diego
+gentlesmith export --profile local-debugger --out /tmp/local-debugger-export
+```
+
+Each export includes:
+
+- `catalog.json` — machine-readable export metadata
+- `profile.yaml` / `profile.json` — the profile spec
+- `source-fragments/` — copied source fragments used by the profile
+- `rendered/` and `diffs/` — only when installed targets bind to that profile
+- `summary.md` and `CHANGELOG.md` — human review files
+
+If no installed target currently uses the profile, export still succeeds. That is intentional: profiles can be specs for sub-agents, orchestrators, framework agents, or future target binding.
+
 ## OpenCode selectable profiles
 
 The OpenCode target can register profiles as selectable primary agents:
@@ -216,6 +270,8 @@ It discovers and references installed/global skills from known roots such as:
 - `~/.agents/skills`
 
 Use gentle-ai or an external skill builder/installer to create skills, then use gentlesmith to reference or toggle them in profiles.
+
+Forge bundles include `sources/skills-discovery.md`, which lists installed skills found in known roots and reminds the receiving agent how to apply L0-L3 skill semantics.
 
 ### Four ways to use a skill
 

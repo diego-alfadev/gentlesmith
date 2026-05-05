@@ -11,6 +11,7 @@ import {
   listBuiltInProfiles,
   listLocalProfiles,
   loadProfile,
+  resolveFragmentPath,
   resolveRuntimePaths,
   resolveUserPath,
   type ProfileSpec,
@@ -55,6 +56,8 @@ interface ForgeArgs {
   from?: string;
   profile?: string;
   out?: string;
+  env: EnvMode;
+  envFrom?: string;
   manual: boolean;
 }
 
@@ -64,12 +67,24 @@ interface ForgeProfileChoice {
   isLocal: boolean;
 }
 
+type EnvMode = "inherit" | "agnostic";
+
+interface EnvBaseline {
+  mode: EnvMode;
+  sourceProfileName?: string;
+  sourceProfilePath?: string;
+  refs: string[];
+  content: string;
+}
+
 function parseForgeArgs(args: string[]): ForgeArgs {
   return {
     name: readFlag(args, "--name"),
     from: readFlag(args, "--from"),
     profile: readFlag(args, "--profile"),
     out: readFlag(args, "--out"),
+    env: parseEnvMode(readFlag(args, "--env")),
+    envFrom: readFlag(args, "--env-from"),
     manual: args.includes("--manual") || args.includes("--local"),
   };
 }
@@ -144,9 +159,10 @@ async function writeForgeBundle(args: ForgeArgs, snapshot: DiscoverySnapshot, bo
     : profile.isLocal
       ? profile.name
       : `local-${slugify(profile.name)}`;
+  const envBaseline = await resolveEnvBaseline(args, profile, profileSpec);
   const intent = args.profile ? "improve-profile" : "create-profile";
   const outDir = resolveUserPath(args.out ?? join(PATHS.runtimeHome, "forges", `${timestamp()}-${targetProfileName}`));
-  const sources = buildForgeSources(profile, profileSpec, snapshot, targetProfileName);
+  const sources = buildForgeSources(profile, profileSpec, snapshot, targetProfileName, envBaseline);
   const context = buildProfileWorkbenchContext({
     paths: PATHS,
     outDir,
@@ -194,6 +210,7 @@ function buildForgeSources(
   profileSpec: ProfileSpec,
   snapshot: DiscoverySnapshot,
   targetProfileName: string,
+  envBaseline: EnvBaseline,
 ): WorkbenchSourceMaterial[] {
   return [
     {
@@ -220,6 +237,13 @@ function buildForgeSources(
     },
     {
       type: "idea",
+      name: envBaseline.mode === "agnostic" ? "env-policy" : "env-baseline",
+      originalPath: envBaseline.sourceProfilePath,
+      bundleFile: envBaseline.mode === "agnostic" ? "sources/env-policy.md" : "sources/env-baseline.md",
+      content: envBaseline.content,
+    },
+    {
+      type: "idea",
       name: "discovery-summary",
       bundleFile: "sources/discovery.md",
       content: [
@@ -235,7 +259,215 @@ function buildForgeSources(
         "",
       ].join("\n"),
     },
+    buildSkillsDiscoverySource(snapshot),
+    buildBridgeReadinessSource(snapshot),
   ];
+}
+
+function buildSkillsDiscoverySource(snapshot: DiscoverySnapshot): WorkbenchSourceMaterial {
+  const bySource = new Map<string, typeof snapshot.skills>();
+  for (const skill of snapshot.skills) {
+    const current = bySource.get(skill.source) ?? [];
+    current.push(skill);
+    bySource.set(skill.source, current);
+  }
+
+  const lines = [
+    "# Skills discovery",
+    "",
+    `Skills CLI detected: ${snapshot.tools.skillsCli.detected ? "yes" : "no"}.`,
+    snapshot.tools.skillsCli.version ? `Skills CLI version: ${snapshot.tools.skillsCli.version}.` : "",
+    "",
+    "Installed skills:",
+  ].filter(Boolean);
+
+  if (snapshot.skills.length === 0) {
+    lines.push("- none detected in known roots");
+  } else {
+    for (const [source, skills] of bySource) {
+      lines.push(``, `## ${source}`);
+      for (const skill of skills) lines.push(`- ${skill.name} — ${skill.path}`);
+    }
+  }
+
+  lines.push(
+    "",
+    "Use L0-L3 incorporation semantics:",
+    "- L0 install-only: no profile write; user invokes manually.",
+    "- L1 reference: compact `references/<slug>.md` with when-to-use guidance.",
+    "- L2 adapted: compact durable behavior in persona/rules/workflows.",
+    "- L3 embedded: core persona/rule edit; highest blast radius.",
+    "",
+    "Do not vendor third-party skill bodies into Gentlesmith built-ins. Prefer upstream installation/reference, e.g. skills.sh or the user's existing skill roots.",
+    "For external discovery, use `gentlesmith skills find <query>` as an optional step; do not block forge on network access.",
+    "",
+  );
+
+  return {
+    type: "idea",
+    name: "skills-discovery",
+    bundleFile: "sources/skills-discovery.md",
+    content: lines.join("\n"),
+  };
+}
+
+function buildBridgeReadinessSource(snapshot: DiscoverySnapshot): WorkbenchSourceMaterial {
+  return {
+    type: "idea",
+    name: "gentle-ai-bridge-readiness",
+    bundleFile: "sources/gentle-ai-bridge.md",
+    content: [
+      "# Gentle-ai bridge readiness",
+      "",
+      `gentle-ai detected: ${snapshot.tools.gentleAi.detected ? "yes" : "no"}.`,
+      snapshot.tools.gentleAi.version ? `gentle-ai version: ${snapshot.tools.gentleAi.version}.` : "",
+      snapshot.tools.gentleAi.path ? `gentle-ai path: ${snapshot.tools.gentleAi.path}.` : "",
+      "",
+      "Current contract:",
+      "- Gentlesmith works standalone by writing Workbench bundles.",
+      "- This bundle can be handed to any coding agent as context.",
+      "- No direct gentle-ai bridge is invoked from Gentlesmith yet.",
+      "- Do not assume gentle-ai plugin/TUI transport until its public contract is verified.",
+      "",
+      "Future bridge direction:",
+      "- gentle-ai may tunnel this bundle as agent context from its TUI.",
+      "- Gentlesmith should keep bundles self-contained so the bridge is an optimization, not a requirement.",
+      "",
+    ].filter(Boolean).join("\n"),
+  };
+}
+
+async function resolveEnvBaseline(
+  args: ForgeArgs,
+  baseProfile: ForgeProfileChoice,
+  baseProfileSpec: ProfileSpec,
+): Promise<EnvBaseline> {
+  if (args.env === "agnostic") {
+    return {
+      mode: "agnostic",
+      refs: [],
+      content: [
+        "# Env Policy",
+        "",
+        "Mode: agnostic.",
+        "",
+        "Do not include local `env/*` fragments unless the user explicitly asks for machine-specific context.",
+        "Use this for portable profiles, orchestrators, sub-agents, framework agents, or catalogued exports where local assumptions would be noise.",
+        "",
+      ].join("\n"),
+    };
+  }
+
+  if (args.envFrom) {
+    const source = await resolveAnyProfile(args.envFrom);
+    const sourceSpec = await loadProfile(PATHS, source.name);
+    const refs = envRefsFromProfile(sourceSpec);
+    return buildEnvBaselineFromRefs(source, refs);
+  }
+
+  const baseRefs = envRefsFromProfile(baseProfileSpec);
+  if (baseProfile.isLocal && baseRefs.length > 0) {
+    return buildEnvBaselineFromRefs(baseProfile, baseRefs);
+  }
+
+  const localSource = await findLocalEnvBaselineProfile();
+  if (localSource) return buildEnvBaselineFromRefs(localSource.profile, localSource.refs);
+
+  return {
+    mode: "inherit",
+    refs: [],
+    content: [
+      "# Env Baseline",
+      "",
+      "Mode: inherit.",
+      "",
+      "No existing local `env/*` fragments were found.",
+      "",
+      "If the forged profile should be machine-aware, ask the user for concrete OS/toolchain facts and create compact runtime-local `env/*` fragments.",
+      "If the profile should be portable, keep it env-agnostic and avoid adding local assumptions.",
+      "",
+    ].join("\n"),
+  };
+}
+
+async function findLocalEnvBaselineProfile(): Promise<{ profile: ForgeProfileChoice; refs: string[] } | null> {
+  const localProfiles = await listLocalProfiles(PATHS);
+  const ordered = [...localProfiles].sort((a, b) => envProfilePriority(a.name) - envProfilePriority(b.name));
+
+  for (const localProfile of ordered) {
+    const spec = await loadProfile(PATHS, localProfile.name);
+    const refs = envRefsFromProfile(spec);
+    if (refs.length > 0) {
+      return { profile: { ...localProfile, isLocal: true }, refs };
+    }
+  }
+
+  return null;
+}
+
+function envProfilePriority(name: string): number {
+  if (name === "local-diego" || name === "diego-local") return 0;
+  if (name.startsWith("local-")) return 1;
+  return 2;
+}
+
+function envRefsFromProfile(spec: ProfileSpec): string[] {
+  return unique((spec.include ?? []).filter((ref) => ref.startsWith("env/")));
+}
+
+async function buildEnvBaselineFromRefs(profile: ForgeProfileChoice, refs: string[]): Promise<EnvBaseline> {
+  if (refs.length === 0) {
+    return {
+      mode: "inherit",
+      sourceProfileName: profile.name,
+      sourceProfilePath: profile.path,
+      refs: [],
+      content: [
+        "# Env Baseline",
+        "",
+        "Mode: inherit.",
+        `Source profile: \`${profile.name}\`.`,
+        "",
+        "The selected env source profile has no `env/*` includes.",
+        "Do not invent local environment facts. Ask the user if this profile should become machine-aware.",
+        "",
+      ].join("\n"),
+    };
+  }
+
+  const sections: string[] = [
+    "# Env Baseline",
+    "",
+    "Mode: inherit.",
+    `Source profile: \`${profile.name}\`.`,
+    `Source path: \`${profile.path}\`.`,
+    "",
+    "Env refs:",
+    ...refs.map((ref) => `- \`${ref}\``),
+    "",
+    "Use this as reusable baseline context when forging variants. Preserve useful refs in the target profile unless it should be env-agnostic.",
+    "Keep secrets out of profile fragments.",
+    "",
+  ];
+
+  for (const ref of refs) {
+    const path = resolveFragmentPath(PATHS, ref);
+    sections.push(`## ${ref}`, "", `Source: \`${path}\``, "");
+    if (existsSync(path)) {
+      sections.push(await readFile(path, "utf8"));
+    } else {
+      sections.push(`Missing fragment for \`${ref}\`. Do not recreate it without confirming intended content.`);
+    }
+    sections.push("");
+  }
+
+  return {
+    mode: "inherit",
+    sourceProfileName: profile.name,
+    sourceProfilePath: profile.path,
+    refs,
+    content: sections.join("\n"),
+  };
 }
 
 async function buildForgePlan(): Promise<ForgePlan> {
@@ -458,6 +690,15 @@ function readFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
   if (idx < 0) return undefined;
   return args[idx + 1];
+}
+
+function parseEnvMode(value: string | undefined): EnvMode {
+  if (!value || value === "inherit") return "inherit";
+  if (value === "agnostic" || value === "none" || value === "skip") return "agnostic";
+
+  console.error(`Invalid --env mode: ${value}`);
+  console.error("Use `--env inherit` or `--env agnostic`.");
+  process.exit(1);
 }
 
 function formatRuntimePath(path: string): string {

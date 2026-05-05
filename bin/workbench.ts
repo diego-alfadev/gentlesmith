@@ -234,6 +234,12 @@ Read bundled source material before writing:
 
 ${context.sources.map((source) => `- \`${join(context.runtime.bundleDir, source.bundleFile)}\``).join("\n")}
 
+If the bundle includes \`sources/env-baseline.md\`, treat it as reusable context from an existing local profile and preserve useful \`env/*\` includes when creating a variant. If it includes \`sources/env-policy.md\`, follow that policy and keep the profile env-agnostic unless the user explicitly changes direction.
+
+If the bundle includes \`sources/skills-discovery.md\`, use it to recommend whether skills belong at L0/L1/L2/L3. Do not copy long third-party skill bodies into profile fragments by default.
+
+If the bundle includes \`sources/gentle-ai-bridge.md\`, treat it as bridge-readiness context only. Do not assume a direct gentle-ai transport exists unless the file says the contract has been verified.
+
 ## What to produce
 
 Create or refine \`${context.targetProfileName}\` as a local Gentlesmith profile.
@@ -325,6 +331,7 @@ function defaultAllowedWrites(paths: RuntimePaths): string[] {
     join(paths.localFragmentsDir, "persona", "*.md"),
     join(paths.localFragmentsDir, "rules", "*.md"),
     join(paths.localFragmentsDir, "workflows", "*.md"),
+    join(paths.localFragmentsDir, "env", "*.md"),
     join(paths.localFragmentsDir, "references", "*.md"),
     join(paths.localProfilesDir, "*.yaml"),
   ];

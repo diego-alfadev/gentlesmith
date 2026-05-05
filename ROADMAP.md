@@ -34,7 +34,8 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 - [x] Skills are discovery/toggle/reference only.
 - [x] Skill builder is out of scope.
-- [x] Minimal L1 skill references use compact `references/<slug>` fragments.
+- [x] Minimal L1 skill references use compact local `references/<slug>` fragments.
+- [x] Third-party skills stay external/upstream, not vendored as built-ins.
 - [ ] Confirm skills.sh global storage and CLI behavior before deeper integration.
 - [ ] Decide whether skills should be installed by gentlesmith or delegated to gentle-ai when available.
 

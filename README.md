@@ -224,13 +224,19 @@ Keep the default profile lean. Add only the amount of behavior you actually want
 | Level | Use | Good for |
 |---|---|---|
 | Install-only | Discover it; invoke it manually when needed. | Large/specialized skills |
-| Reference | Add compact `references/<slug>` when-to-use guidance. | `think-through` for new projects, paradigm shifts, or rabbit-hole risk |
+| Reference | Add compact local `references/<slug>` when-to-use guidance for an installed/external skill. | `think-through`-style skill for new projects, paradigm shifts, or rabbit-hole risk |
 | Adapted fragment | Extract a short behavior block into persona/rules/workflows. | Light `grill-me` behavior in `persona/learning-coach` |
 | Embedded rule/persona | Make it part of the base contract. | Jarvis-style no-yes-man judgment |
 
 Default Gentlesmith built-ins are intentionally low-intrusion. Richer behavior should be opt-in through fragments or local profiles.
 
-For now, `skills:` stays a simple metadata/package list. Do not use structured skill objects yet; put durable when-to-use behavior in `references/` fragments.
+For now, `skills:` stays a simple metadata/package list. Do not use structured skill objects yet; put durable when-to-use behavior in local `references/` fragments.
+
+Do not vendor third-party skills into Gentlesmith built-ins. Install/reference them from upstream instead, for example:
+
+```bash
+npx skills add https://github.com/neonwatty/claude-interview-skills/ --skill think-through
+```
 
 ## Coexistence with gentle-ai
 

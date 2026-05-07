@@ -19,7 +19,7 @@ import {
   removeInstalledTarget,
   type TargetSpec,
 } from "./runtime";
-import { purgeOpenCodeProfileAgent } from "./opencode";
+import { purgeOpenCodeGentlesmithAgents } from "./opencode";
 
 function usage(): never {
   console.log("Usage:");
@@ -165,7 +165,7 @@ async function purgeTarget(name?: string): Promise<void> {
   if (installed.spec.mode === "per-fragment") {
     await purgePerFragment(installed.spec);
   } else if (installed.spec.mode === "opencode-agent") {
-    await purgeOpenCodeProfileAgent(installed.spec.destination, installed.spec.profile);
+    await purgeOpenCodeGentlesmithAgents(installed.spec.destination);
   } else {
     await purgeManagedBlock(installed.spec);
   }

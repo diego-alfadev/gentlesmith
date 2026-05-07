@@ -13,21 +13,24 @@ import {
   PACKAGE_ROOT,
   ensureRuntimeState,
   listInstalledTargets,
+  listLocalProfiles,
   loadProfile,
   migrateRuntimeState,
   resolveFragmentPath,
   resolveRuntimePaths,
   resolveUserPath,
+  saveInstalledTarget,
   stripManagedBlock,
   writeRuntimeFile,
+  type NamedTarget,
   type ProfileSpec,
   type TargetSpec,
 } from "./runtime";
 import { runTarget } from "./target";
 import {
-  applyOpenCodeAgentPlan,
-  planOpenCodeProfileAgent,
-  summarizeOpenCodeAgentPlan,
+  applyOpenCodeProfilesPlan,
+  planOpenCodeProfiles,
+  summarizeOpenCodeProfilesPlan,
 } from "./opencode";
 
 const PATHS = resolveRuntimePaths();
@@ -120,6 +123,35 @@ async function loadInstalledTargetsFiltered(filter?: string) {
   return targets
     .filter((target) => target.spec.enabled !== false)
     .filter((target) => !filter || target.name === filter);
+}
+
+function destinationCollisionKey(target: TargetSpec): string | null {
+  if (target.mode === "opencode-agent") return null;
+  const kind = target.mode === "per-fragment" ? "dir" : "file";
+  return `${kind}:${resolveUserPath(target.destination)}`;
+}
+
+function assertNoTargetDestinationCollisions(targets: NamedTarget[]): void {
+  const byDestination = new Map<string, NamedTarget[]>();
+  for (const target of targets) {
+    const key = destinationCollisionKey(target.spec);
+    if (!key) continue;
+    byDestination.set(key, [...(byDestination.get(key) ?? []), target]);
+  }
+
+  const collisions = Array.from(byDestination.values()).filter((group) => group.length > 1);
+  if (collisions.length === 0) return;
+
+  console.error("ERROR: multiple enabled targets write to the same destination.");
+  console.error("Disable one target or change its destination before syncing/applying.\n");
+  for (const group of collisions) {
+    console.error(`destination: ${resolveUserPath(group[0].spec.destination)}`);
+    for (const target of group) {
+      console.error(`  - ${target.name} (agent=${target.spec.agent}, profile=${target.spec.profile}, mode=${target.spec.mode})`);
+    }
+    console.error("");
+  }
+  process.exit(1);
 }
 
 async function planTarget(name: string, target: TargetSpec, args: string[]): Promise<RenderPlan | null> {
@@ -317,6 +349,20 @@ async function applyPerFragmentPlan(plan: PerFragmentPlan) {
   }
 }
 
+async function buildOpenCodeProfileInputs(agentName: string, requiredProfileName?: string) {
+  const localProfiles = await listLocalProfiles(PATHS);
+  const names = new Set<string>(localProfiles.map((profile) => profile.name));
+  if (requiredProfileName) names.add(requiredProfileName);
+  if (names.size === 0) names.add("jarvis");
+
+  const out: Array<{ profile: ProfileSpec; prompt: string }> = [];
+  for (const name of Array.from(names).sort()) {
+    const profile = await loadProfile(PATHS, name);
+    out.push({ profile, prompt: await composeFragments(profile, agentName) });
+  }
+  return out;
+}
+
 function runUpdate(): void {
   if (!existsSync(join(PACKAGE_ROOT, ".git"))) {
     console.error("ERROR: gentlesmith was not installed via git clone — cannot self-update.");
@@ -390,15 +436,15 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
 
   const collectedSkills: string[] = [];
   const seenProfiles = new Set<string>();
+  assertNoTargetDestinationCollisions(targets);
 
   for (const { name, spec } of targets) {
     if (spec.mode === "opencode-agent") {
-      const profile = await loadProfile(PATHS, spec.profile);
-      const composed = await composeFragments(profile, spec.agent);
-      const plan = await planOpenCodeProfileAgent(spec.destination, profile, composed);
-      summarizeOpenCodeAgentPlan(plan, apply);
-      await writeRuntimeFile(join(PATHS.renderedDir, `${name}.md`), composed);
-      if (apply) await applyOpenCodeAgentPlan(plan);
+      const profiles = await buildOpenCodeProfileInputs(spec.agent, spec.profile);
+      const plan = await planOpenCodeProfiles(spec.destination, profiles);
+      summarizeOpenCodeProfilesPlan(plan, apply);
+      await writeRuntimeFile(join(PATHS.renderedDir, `${name}.md`), plan.finalContent);
+      if (apply) await applyOpenCodeProfilesPlan(plan);
     } else if (spec.mode === "per-fragment") {
       const plan = await planPerFragmentTarget(name, spec, args);
       if (!plan) continue;
@@ -424,11 +470,168 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
   if (!apply) console.log("Re-run with `gentlesmith sync --apply` to write changes.");
 }
 
+interface ApplyArgs {
+  profileName?: string;
+  apply: boolean;
+  targetNames: string[];
+}
+
+type ApplyPlan =
+  | { kind: "managed"; target: NamedTarget; updatedSpec: TargetSpec; plan: RenderPlan }
+  | { kind: "per-fragment"; target: NamedTarget; updatedSpec: TargetSpec; plan: PerFragmentPlan }
+  | { kind: "opencode"; target: NamedTarget; updatedSpec: TargetSpec; plan: Awaited<ReturnType<typeof planOpenCodeProfiles>> };
+
+async function runApply(rawArgs: string[]): Promise<void> {
+  await ensureRuntimeState(PATHS);
+  const args = parseApplyArgs(rawArgs);
+  if (!args.profileName) {
+    console.error("Usage: gentlesmith apply <profile> [--apply] [--target <name>]");
+    process.exit(1);
+  }
+
+  const profileName = await resolveProfileAlias(args.profileName);
+
+  const installed = await listInstalledTargets(PATHS);
+  const enabled = installed.filter((target) => target.spec.enabled !== false);
+  const targets = resolveApplyTargets(enabled, args);
+
+  if (targets.length === 0) {
+    console.log("No switchable targets found.");
+    console.log("Use `gentlesmith target list` to inspect installed targets.");
+    return;
+  }
+
+  const updatedTargets = targets.map((target) => ({
+    ...target,
+    spec: { ...target.spec, profile: profileName },
+  }));
+  assertNoTargetDestinationCollisions(updatedTargets);
+
+  console.log(`gentlesmith — PROFILE SWITCH ${args.apply ? "APPLY" : "DRY-RUN"}`);
+  console.log(`profile: ${profileName}`);
+
+  const plans: ApplyPlan[] = [];
+  for (const target of updatedTargets) {
+    const previousProfile = targets.find((item) => item.name === target.name)?.spec.profile ?? "(unknown)";
+    console.log(`\n━━━ switch target: ${target.name} ━━━`);
+    console.log(`  profile: ${previousProfile} → ${profileName}`);
+
+    if (target.spec.mode === "opencode-agent") {
+      const profiles = await buildOpenCodeProfileInputs(target.spec.agent, target.spec.profile);
+      const plan = await planOpenCodeProfiles(target.spec.destination, profiles, { defaultProfileName: target.spec.profile });
+      summarizeOpenCodeProfilesPlan(plan, args.apply);
+      console.log("  behavior:     registers Gentlesmith profiles and switches OpenCode default_agent");
+      plans.push({ kind: "opencode", target, updatedSpec: target.spec, plan });
+    } else if (target.spec.mode === "per-fragment") {
+      const plan = await planPerFragmentTarget(target.name, target.spec, rawArgs);
+      if (!plan) continue;
+      summarizePerFragment(plan, args.apply);
+      plans.push({ kind: "per-fragment", target, updatedSpec: target.spec, plan });
+    } else {
+      const plan = await planTarget(target.name, target.spec, rawArgs);
+      if (!plan) continue;
+      summarize(plan, args.apply);
+      plans.push({ kind: "managed", target, updatedSpec: target.spec, plan });
+    }
+  }
+
+  const profile = await loadProfile(PATHS, profileName);
+  invokeSkillsBridge(profile.skills ?? [], args.apply);
+
+  if (!args.apply) {
+    console.log("\nNo files changed.");
+    console.log(`Re-run with \`gentlesmith apply ${profileName} --apply\` to switch these targets.`);
+    return;
+  }
+
+  for (const item of plans) {
+    await saveInstalledTarget(PATHS, item.target.name, item.updatedSpec);
+    if (item.kind === "managed") {
+      await persistRendered(item.plan);
+      await applyPlan(item.plan);
+    } else if (item.kind === "per-fragment") {
+      await applyPerFragmentPlan(item.plan);
+    } else {
+      await writeRuntimeFile(join(PATHS.renderedDir, `${item.target.name}.md`), item.plan.finalContent);
+      await applyOpenCodeProfilesPlan(item.plan);
+    }
+  }
+
+  console.log(`\nApplied profile switch: ${profileName}`);
+}
+
+async function resolveProfileAlias(input: string): Promise<string> {
+  const candidates = input.startsWith("local-") ? [input] : [`local-${input}`, input];
+  for (const candidate of candidates) {
+    try {
+      await loadProfile(PATHS, candidate);
+      return candidate;
+    } catch {
+    }
+  }
+
+  console.error(`Profile not found: ${input}`);
+  if (!input.startsWith("local-")) console.error(`Also tried: local-${input}`);
+  process.exit(1);
+}
+
+function parseApplyArgs(args: string[]): ApplyArgs {
+  return {
+    profileName: readApplyProfileName(args),
+    apply: args.includes("--apply"),
+    targetNames: readRepeatedFlag(args, "--target"),
+  };
+}
+
+function readApplyProfileName(args: string[]): string | undefined {
+  const explicit = readSingleFlag(args, "--profile");
+  if (explicit) return explicit;
+  return args.find((arg, idx) => {
+    if (arg.startsWith("--")) return false;
+    const prev = args[idx - 1];
+    return prev !== "--target" && prev !== "--profile";
+  });
+}
+
+function readRepeatedFlag(args: string[], flag: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === flag && args[i + 1]) values.push(args[i + 1]);
+  }
+  return Array.from(new Set(values));
+}
+
+function readSingleFlag(args: string[], flag: string): string | undefined {
+  const idx = args.indexOf(flag);
+  if (idx < 0) return undefined;
+  return args[idx + 1];
+}
+
+function resolveApplyTargets(enabledTargets: NamedTarget[], args: ApplyArgs): NamedTarget[] {
+  if (args.targetNames.length === 0) {
+    return enabledTargets;
+  }
+
+  const byName = new Map(enabledTargets.map((target) => [target.name, target]));
+  const out: NamedTarget[] = [];
+  for (const name of args.targetNames) {
+    const target = byName.get(name);
+    if (!target) {
+      console.error(`Target not installed or disabled: ${name}`);
+      console.error("Use `gentlesmith target list` to inspect available targets.");
+      process.exit(1);
+    }
+    out.push(target);
+  }
+  return out;
+}
+
 function printUsage(): void {
   console.log(`gentlesmith — compose local AI-agent behavior from fragments
 
 Usage:
   gentlesmith forge              bootstrap if needed, then start LLM-led profile forging
+  gentlesmith apply <profile>    switch active profile for enabled targets
   gentlesmith patch              create a self-contained profile patch bundle
   gentlesmith browse             inspect, edit, and apply profiles from the TUI
 
@@ -436,6 +639,7 @@ Advanced:
   gentlesmith init               deterministic runtime bootstrap
   gentlesmith forge --name <profile> --from <base>
   gentlesmith forge --profile <profile>
+  gentlesmith apply <profile> [--apply] [--target <name>]
   gentlesmith sync [--apply] [--target <name>]
   gentlesmith export [--profile <profile>] [--out <dir>]
   gentlesmith target <list|add|set-profile|enable|disable|remove|purge> [name]
@@ -480,6 +684,10 @@ async function main() {
   if (command === "forge") {
     const { runForge } = await import("./forge");
     await runForge(rest);
+    return;
+  }
+  if (command === "apply") {
+    await runApply(rest);
     return;
   }
   if (command === "patch") {

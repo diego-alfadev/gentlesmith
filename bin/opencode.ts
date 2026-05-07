@@ -12,7 +12,21 @@ export interface OpenCodeAgentPlan {
   finalContent: string;
 }
 
+export interface OpenCodeProfileInput {
+  profile: ProfileSpec;
+  prompt: string;
+}
+
+export interface OpenCodeProfilesPlan {
+  configPath: string;
+  agentKeys: string[];
+  defaultAgentKey?: string;
+  changeType: "create-config" | "update-config" | "noop";
+  finalContent: string;
+}
+
 interface OpenCodeConfig {
+  default_agent?: string;
   agent?: Record<string, unknown>;
   [key: string]: unknown;
 }
@@ -67,7 +81,57 @@ export async function planOpenCodeProfileAgent(
   };
 }
 
+export async function planOpenCodeProfiles(
+  destination: string,
+  profiles: OpenCodeProfileInput[],
+  options: { defaultProfileName?: string } = {},
+): Promise<OpenCodeProfilesPlan> {
+  const configPath = resolveUserPath(destination);
+  const before = await readOpenCodeConfig(configPath);
+  const config = structuredClone(before);
+  const agent = isPlainObject(config.agent) ? { ...config.agent } : {};
+  const agentKeys: string[] = [];
+
+  for (const { profile, prompt } of profiles) {
+    const agentKey = profileToAgentKey(profile.name);
+    agentKeys.push(agentKey);
+    agent[agentKey] = buildAgentEntry(profile, prompt);
+  }
+
+  config.agent = agent;
+
+  let defaultAgentKey: string | undefined;
+  if (options.defaultProfileName) {
+    defaultAgentKey = profileToAgentKey(options.defaultProfileName);
+    config.default_agent = defaultAgentKey;
+  }
+
+  const finalContent = `${JSON.stringify(config, null, 2)}\n`;
+  const initialContent = existsSync(configPath) ? `${JSON.stringify(before, null, 2)}\n` : "";
+  const changeType: OpenCodeProfilesPlan["changeType"] = !existsSync(configPath)
+    ? "create-config"
+    : initialContent === finalContent
+      ? "noop"
+      : "update-config";
+
+  return {
+    configPath,
+    agentKeys,
+    defaultAgentKey,
+    changeType,
+    finalContent,
+  };
+}
+
 export async function applyOpenCodeAgentPlan(plan: OpenCodeAgentPlan): Promise<void> {
+  if (plan.changeType === "noop") return;
+  await mkdir(dirname(plan.configPath), { recursive: true });
+  const tempPath = `${plan.configPath}.gentlesmith.tmp`;
+  await writeFile(tempPath, plan.finalContent, "utf8");
+  await rename(tempPath, plan.configPath);
+}
+
+export async function applyOpenCodeProfilesPlan(plan: OpenCodeProfilesPlan): Promise<void> {
   if (plan.changeType === "noop") return;
   await mkdir(dirname(plan.configPath), { recursive: true });
   const tempPath = `${plan.configPath}.gentlesmith.tmp`;
@@ -99,6 +163,32 @@ export async function purgeOpenCodeProfileAgent(destination: string, profileName
   return true;
 }
 
+export async function purgeOpenCodeGentlesmithAgents(destination: string): Promise<boolean> {
+  const configPath = resolveUserPath(destination);
+  if (!existsSync(configPath)) return false;
+
+  const config = await readOpenCodeConfig(configPath);
+  if (!isPlainObject(config.agent)) return false;
+
+  let changed = false;
+  for (const key of Object.keys(config.agent)) {
+    if (key.startsWith("gentlesmith-")) {
+      delete config.agent[key];
+      changed = true;
+    }
+  }
+  if (typeof config.default_agent === "string" && config.default_agent.startsWith("gentlesmith-")) {
+    delete config.default_agent;
+    changed = true;
+  }
+  if (!changed) return false;
+
+  await mkdir(dirname(configPath), { recursive: true });
+  const tempPath = `${configPath}.gentlesmith.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await rename(tempPath, configPath);
+  return true;
+}
 
 export function summarizeOpenCodeAgentPlan(plan: OpenCodeAgentPlan, apply: boolean): void {
   const verb = apply ? "WRITE" : "WOULD";
@@ -109,6 +199,19 @@ export function summarizeOpenCodeAgentPlan(plan: OpenCodeAgentPlan, apply: boole
   console.log(`  destination:  ${plan.configPath}`);
   console.log(`  action:       ${action}`);
   console.log("  owns:         agent.gentlesmith-* only");
+}
+
+export function summarizeOpenCodeProfilesPlan(plan: OpenCodeProfilesPlan, apply: boolean): void {
+  const verb = apply ? "WRITE" : "WOULD";
+  const action = plan.changeType === "noop"
+    ? "NO CHANGES"
+    : `${verb} ${plan.changeType.replace("-", " ").toUpperCase()}`;
+  console.log(`\n━━━ opencode profiles (${plan.agentKeys.length}) ━━━`);
+  console.log(`  destination:   ${plan.configPath}`);
+  console.log(`  action:        ${action}`);
+  console.log(`  agents:        ${plan.agentKeys.join(", ")}`);
+  if (plan.defaultAgentKey) console.log(`  default_agent: ${plan.defaultAgentKey}`);
+  console.log("  owns:          agent.gentlesmith-* and default_agent only when set to gentlesmith-*");
 }
 
 export function profileToAgentKey(profileName: string): string {
@@ -122,4 +225,30 @@ export function profileToAgentKey(profileName: string): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function readOpenCodeConfig(configPath: string): Promise<OpenCodeConfig> {
+  if (!existsSync(configPath)) return {};
+
+  const raw = await readFile(configPath, "utf8");
+  try {
+    return JSON.parse(raw) as OpenCodeConfig;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`OpenCode config is not valid JSON: ${configPath} (${message})`);
+  }
+}
+
+function buildAgentEntry(profile: ProfileSpec, prompt: string): Record<string, unknown> {
+  return {
+    description: `Gentlesmith profile: ${profile.name}`,
+    mode: "primary",
+    prompt,
+    tools: {
+      bash: true,
+      edit: true,
+      read: true,
+      write: true,
+    },
+  };
 }

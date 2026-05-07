@@ -12,6 +12,7 @@ gentlesmith is gentle-ai-first, but not gentle-ai-dependent.
 | User persona/rules/env/profile composition | gentlesmith |
 | Local profile-to-target binding | gentlesmith |
 | OpenCode selectable user profiles | gentlesmith, under `agent.gentlesmith-*` only |
+| OpenCode active Gentlesmith profile | gentlesmith, via `default_agent` only when pointing to `gentlesmith-*` |
 
 ## Marker namespace
 
@@ -69,6 +70,16 @@ agent.gentlesmith-*
 ```
 
 These agents represent rich gentlesmith profiles selectable from OpenCode.
+
+When `gentlesmith apply <profile>` is used, gentlesmith may set:
+
+```json
+{
+  "default_agent": "gentlesmith-<profile>"
+}
+```
+
+It must preserve a non-gentlesmith `default_agent` during normal `sync`. This aligns with gentle-ai's external profile manager compatibility path: gentlesmith can manage user profile activation without overwriting gentle-ai orchestrator prompts.
 
 ## Skills
 

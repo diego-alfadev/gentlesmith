@@ -7,6 +7,8 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 - [x] Runtime state lives outside the repo in `~/.gentlesmith`.
 - [x] `sync` renders installed targets from runtime-local target definitions.
 - [x] Local profiles can be bound to targets.
+- [x] `apply <profile>` switches enabled targets with dry-run by default.
+- [x] Sync/apply detect same-destination target collisions before writing.
 - [x] `forge` exists.
 - [x] `forge` auto-bootstraps runtime state when needed.
 - [x] `forge` writes self-contained Workbench bundles by default.
@@ -20,7 +22,8 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 - [x] gentle-ai/toolchain discovery runs under the hood.
 - [x] Integration fragments exist for Engram, Context7, and SDD.
-- [x] OpenCode target can register selectable `agent.gentlesmith-*` profiles.
+- [x] OpenCode sync registers Gentlesmith profiles as selectable primary agents.
+- [x] `apply <profile>` sets OpenCode `default_agent` to the selected Gentlesmith profile.
 - [x] Contract states gentlesmith must not touch `gentle-orchestrator` or `sdd-*`.
 - [ ] Validate OpenCode selectable profiles in a real OpenCode session.
 

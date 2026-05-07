@@ -45,6 +45,7 @@ gentlesmith browse
 Or use the advanced CLI:
 
 ```bash
+gentlesmith apply debugger # preview switching enabled targets to local-debugger/debugger
 gentlesmith sync          # dry-run render
 gentlesmith export        # write a catalogable profile export
 gentlesmith sync --apply  # write overlays / selectable profile entries
@@ -68,6 +69,7 @@ Gentlesmith is multi-profile by design:
 - you can forge many local profiles
 - targets choose which profile they render
 - `sync` applies the profiles currently bound to installed targets
+- `apply <profile>` switches enabled targets to a profile, with preview by default
 - a profile can be exported, catalogued, or used for sub-agents/framework agents without ever being synced into your main local agents
 
 ## Commands
@@ -77,6 +79,7 @@ Primary:
 | Command | Purpose |
 |---|---|
 | `gentlesmith forge` | Bootstrap if needed, then start LLM-led profile forging |
+| `gentlesmith apply <profile>` | Preview/switch active profile for enabled targets |
 | `gentlesmith patch` | Create a self-contained patch bundle for profile changes |
 | `gentlesmith browse` | Inspect/edit profiles, fragments, skills, targets, and apply |
 
@@ -92,6 +95,31 @@ Advanced:
 | `gentlesmith skills ...` | Discover/list/reference skills; no skill builder |
 | `gentlesmith migrate` | Explicit legacy local-state migration |
 | `gentlesmith update` | Update a git-clone install |
+
+## Apply vs sync vs targets
+
+`targets` are low-level bindings: “render profile X into destination Y”.
+
+Most users should not need to think about them every day:
+
+```bash
+gentlesmith apply debugger          # preview switch to local-debugger/debugger
+gentlesmith apply debugger --apply  # write target bindings and rendered outputs
+gentlesmith apply jarvis --apply    # switch back
+```
+
+By default, `apply` switches enabled targets. For OpenCode, that means Gentlesmith registers local profiles as selectable primary agents and sets `default_agent` to the selected profile.
+
+Use explicit targets when needed:
+
+```bash
+gentlesmith apply debugger --target codex
+gentlesmith apply debugger --target opencode --apply # set OpenCode default_agent
+gentlesmith sync --target codex                      # render only one target
+gentlesmith target set-profile codex local-debugger  # low-level binding
+```
+
+`sync` always means: render the profiles currently bound to installed targets. It does not choose a new profile for you.
 
 ## Discovery
 
@@ -124,6 +152,8 @@ Not implemented yet:
 - no assumption that gentle-ai owns Gentlesmith state
 
 That keeps Gentlesmith usable standalone while leaving a clean path for a future gentle-ai TUI/plugin integration.
+
+See `GENTLE_AI_VALUE_PROPOSITION.md` for the integration proposal.
 
 ## Forge
 
@@ -240,9 +270,9 @@ Each export includes:
 
 If no installed target currently uses the profile, export still succeeds. That is intentional: profiles can be specs for sub-agents, orchestrators, framework agents, or future target binding.
 
-## OpenCode selectable profiles
+## OpenCode profiles
 
-The OpenCode target can register profiles as selectable primary agents:
+When the OpenCode target is installed, Gentlesmith syncs local profiles as selectable primary agents:
 
 ```text
 agent.gentlesmith-diego
@@ -250,7 +280,17 @@ agent.gentlesmith-reviewer
 agent.gentlesmith-surgical
 ```
 
-gentlesmith only owns `agent.gentlesmith-*` keys in `~/.config/opencode/opencode.json`.
+`gentlesmith apply debugger --apply` also sets:
+
+```json
+{
+  "default_agent": "gentlesmith-debugger"
+}
+```
+
+This follows gentle-ai's OpenCode direction: profiles should appear in OpenCode without the user memorizing a separate registration step.
+
+gentlesmith only owns `agent.gentlesmith-*` keys and `default_agent` when it points to a `gentlesmith-*` agent in `~/.config/opencode/opencode.json`.
 
 It must not modify gentle-ai-owned keys such as:
 

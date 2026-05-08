@@ -24,10 +24,15 @@ gentlesmith owns the user-behavior layer:
 ## Quickstart
 
 ```bash
-# once published
+# global install
 bun add -g gentlesmith
+# or, once published to npm:
+pnpm add -g gentlesmith
 
-# current local repo workflow
+# current local repo workflow while pre-release
+git clone https://github.com/diego-alfadev/gentlesmith
+cd gentlesmith
+bun install
 bun link
 
 # first real command
@@ -59,6 +64,15 @@ gentlesmith sync          # dry-run render
 gentlesmith export        # write a catalogable profile export
 gentlesmith sync --apply  # write overlays / selectable profile entries
 ```
+
+Clean start for old local installs:
+
+```bash
+mv ~/.gentlesmith ~/.gentlesmith.backup.$(date +%Y%m%d-%H%M%S)
+gentlesmith forge
+```
+
+Do this only if you are comfortable rebuilding runtime state. Keep the backup until your profiles/fragments are reviewed.
 
 ## Core model
 

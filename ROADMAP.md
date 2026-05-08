@@ -47,8 +47,9 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 ## P4 — Packaging
 
+- [x] Define npm package file allowlist.
+- [x] Document global install and clean-start workflow.
 - [ ] Publish package once CLI/runtime semantics stabilize.
-- [ ] Replace local `bun link` docs with `bun add -g gentlesmith` / npm/pnpm equivalents.
 - [ ] Add release/update story that does not depend on local repo path.
 
 ## P5 — Plugin path

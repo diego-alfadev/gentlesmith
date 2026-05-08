@@ -12,10 +12,20 @@ Cross-platform setup guide for **macOS / Linux / Windows**.
 
 ---
 
-## Step 1 — Clone & install
+## Step 1 — Install
+
+Preferred once published:
 
 ```bash
-git clone <this-repo-url> gentlesmith
+bun add -g gentlesmith
+# or
+pnpm add -g gentlesmith
+```
+
+Current pre-release repo workflow:
+
+```bash
+git clone https://github.com/diego-alfadev/gentlesmith
 cd gentlesmith
 bun install
 bun link
@@ -27,7 +37,7 @@ bun link
 gentlesmith forge
 ```
 
-`forge` bootstraps `~/.gentlesmith` if needed, discovers gentle-ai/OpenCode/Engram/Context7/skills, and prints an LLM handoff for profile refinement.
+`forge` bootstraps `~/.gentlesmith` if needed, discovers gentle-ai/OpenCode/Engram/Context7/skills, and writes a self-contained Workbench bundle for profile refinement.
 
 If you only want deterministic bootstrap:
 
@@ -41,22 +51,41 @@ Manual deterministic forge fallback:
 gentlesmith forge --manual
 ```
 
-## Step 3 — Browse, dry-run & apply
+## Step 3 — Browse, apply, export
 
 ```bash
-gentlesmith sync              # dry-run — see what would change
-gentlesmith export            # rendered prompts + diffs in a sandbox folder
-gentlesmith sync --apply      # write changes to target files
+gentlesmith browse                  # cockpit
+gentlesmith apply debugger          # preview switching active profile
+gentlesmith apply debugger --apply  # write profile switch
+gentlesmith export --profile local-debugger
 ```
 
-Check previews in `~/.gentlesmith/.last-rendered/` before applying.
+Check previews in `~/.gentlesmith/.last-rendered/` and exports in `~/.gentlesmith/exports/` before applying irreversible changes.
 
-`sync` renders installed targets. To use another profile for a target:
+`sync` renders installed targets without choosing a new profile:
+
+```bash
+gentlesmith sync              # dry-run current target bindings
+gentlesmith sync --apply      # write current target bindings
+gentlesmith sync --target codex
+```
+
+Advanced target binding remains available:
 
 ```bash
 gentlesmith target set-profile claude local-yourname
-gentlesmith sync --target claude
 ```
+
+## Clean start from an older install
+
+If you used an old pre-release runtime and want a fresh start:
+
+```bash
+mv ~/.gentlesmith ~/.gentlesmith.backup.$(date +%Y%m%d-%H%M%S)
+gentlesmith forge
+```
+
+Keep the backup until you have copied any personal profiles/fragments you still need.
 
 ## Optional local env files
 

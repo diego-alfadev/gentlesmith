@@ -6,8 +6,27 @@
   "bin": {
     "gentlesmith": "./bin/distribute.ts"
   },
+  "files": [
+    "bin/",
+    "fragments/",
+    "presets/",
+    "profiles/jarvis.yaml",
+    "profiles/surgical.yaml",
+    "targets/agents.yaml",
+    "targets/antigravity.yaml",
+    "targets/claude.yaml",
+    "targets/codex.yaml",
+    "targets/cursor.yaml",
+    "targets/opencode.yaml",
+    "README.md",
+    "SETUP.md",
+    "GENTLE_AI_CONTRACT.md",
+    "GENTLE_AI_VALUE_PROPOSITION.md",
+    "ROADMAP.md"
+  ],
   "scripts": {
     "distribute": "bun run bin/distribute.ts",
+    "pack:check": "bun pm pack --dry-run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

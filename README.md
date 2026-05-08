@@ -42,6 +42,15 @@ Then inspect/apply from the cockpit:
 gentlesmith browse
 ```
 
+Browse exposes the normal flow without memorizing paths:
+
+```text
+Create / forge profile
+Apply / switch profile
+Export / review profile
+Review pending bundle
+```
+
 Or use the advanced CLI:
 
 ```bash

@@ -663,11 +663,66 @@ async function dryRun() {
 }
 
 async function applyNow() {
-  banner("Apply");
-  const ok = await confirm({ message: "Write changes to all agent config files?", default: true });
+  banner("Apply Current Bindings");
+  const ok = await confirm({ message: "Write current target bindings to agent config files?", default: true });
   if (!ok) return;
   spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "sync", "--apply"], { stdio: "inherit" });
   console.log(`\n  ${c.green("✓")} Done.\n`);
+  await pause();
+}
+
+async function applyProfile() {
+  banner("Apply / Switch Profile");
+  const profiles = await loadProfiles();
+  if (profiles.length === 0) {
+    console.log("  No profiles found. Run forge first.\n");
+    await pause();
+    return;
+  }
+
+  const profileName = await select({
+    message: "Profile to apply:",
+    choices: profiles.map((profile) => ({
+      name: `${profile.name}${profile.isLocal ? c.yellow(" (local)") : c.dim(" (bundled)")}  ${c.dim(`${profile.include.length} fragments`)}`,
+      value: profile.name,
+    })),
+  });
+
+  banner(`Apply: ${profileName}`);
+  console.log(`  Previewing switch to ${c.cyan(profileName)}...\n`);
+  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "apply", profileName], { stdio: "inherit" });
+
+  const ok = await confirm({ message: `Apply ${profileName} now?`, default: false });
+  if (!ok) {
+    console.log(`\n  ${c.dim("No changes written.")}\n`);
+    await pause();
+    return;
+  }
+
+  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "apply", profileName, "--apply"], { stdio: "inherit" });
+  console.log(`\n  ${c.green("✓")} Applied ${c.cyan(profileName)}.\n`);
+  await pause();
+}
+
+async function exportProfile() {
+  banner("Export / Review Profile");
+  const profiles = await loadProfiles();
+  if (profiles.length === 0) {
+    console.log("  No profiles found. Run forge first.\n");
+    await pause();
+    return;
+  }
+
+  const profileName = await select({
+    message: "Profile to export:",
+    choices: profiles.map((profile) => ({
+      name: `${profile.name}${profile.isLocal ? c.yellow(" (local)") : c.dim(" (bundled)")}  ${c.dim(`${profile.include.length} fragments`)}`,
+      value: profile.name,
+    })),
+  });
+
+  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "export", "--profile", profileName], { stdio: "inherit" });
+  console.log("");
   await pause();
 }
 
@@ -782,6 +837,8 @@ export async function runBrowse(): Promise<void> {
           new Separator(c.dim("── workbench ──")),
           { name: `${c.green("✦")} Create / forge profile`, value: "forge" },
           { name: `${c.green("✦")} Improve existing profile`, value: "improve" },
+          { name: `${c.green("✦")} Apply / switch profile`, value: "apply-profile" },
+          { name: `${c.green("✦")} Export / review profile`, value: "export-profile" },
           { name: `${c.green("✦")} Patch from skill / markdown / idea`, value: "patch" },
           { name: `${c.yellow("◈")} Review pending bundle`, value: "bundle" },
           new Separator(c.dim("── explore ──")),
@@ -797,7 +854,7 @@ export async function runBrowse(): Promise<void> {
           { name: `${c.green("+")} New fragment`, value: "scaffold" },
           new Separator(c.dim("── render ──")),
           { name: `${c.yellow("▶")} Dry-run sync`, value: "dryrun" },
-          { name: `${c.magenta("▶")} Apply sync now`, value: "apply" },
+          { name: `${c.magenta("▶")} Apply current target bindings`, value: "apply" },
           new Separator(""),
           { name: `${c.dim("exit")}`, value: "exit" },
         ],
@@ -812,6 +869,8 @@ export async function runBrowse(): Promise<void> {
         case "fragments": await showFragments(); break;
         case "forge": await forgeProfile(); break;
         case "improve": await improveProfile(); break;
+        case "apply-profile": await applyProfile(); break;
+        case "export-profile": await exportProfile(); break;
         case "patch": await patchProfile(); break;
         case "bundle": await reviewPendingBundle(); break;
         case "discovery": await showDiscovery(); break;

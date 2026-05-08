@@ -32,6 +32,7 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 - [x] Browse shows discovery snapshot.
 - [x] Browse shows installed/global skills.
 - [x] Profile workspace opens profile, fragments, and skill roots.
+- [x] Browse exposes apply/switch and export/review profile actions.
 - [ ] Improve spacing/back navigation to match gentle-ai TUI quality.
 - [ ] Add first-class target/profile rebinding in Browse instead of relying on advanced CLI.
 

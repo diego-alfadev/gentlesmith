@@ -63,6 +63,13 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 - [x] Add `gentlesmith patch` CLI bundle flow for adapting installed skills or free-form ideas into profile fragments.
 - [x] Make `gentlesmith export` produce catalogable profile specs with source fragments and target applicability.
-- [ ] Add `gentlesmith patch` to Browse/TUI as a self-contained guided flow.
+- [x] Add `gentlesmith patch` to Browse/TUI as a self-contained guided flow.
 - [ ] Add local export comparison across two profile specs.
 - [ ] Explore profile benchmarking: run the same prompts against multiple profiles and compare behavior, friction, and token cost.
+
+
+## Near-term UX correction
+
+- [ ] Reorder docs/TUI around `forge → review/export → preview apply → apply --apply`.
+- [ ] Add a simple `gentlesmith upgrade` lifecycle command; keep `migrate` as legacy import.
+- [ ] Prepare a concise gentle-ai maintainer proposal around namespace and companion CLI status.

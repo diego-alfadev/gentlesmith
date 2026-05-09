@@ -24,55 +24,59 @@ gentlesmith owns the user-behavior layer:
 ## Quickstart
 
 ```bash
-# global install
-bun add -g gentlesmith
-# or, once published to npm:
-pnpm add -g gentlesmith
+# beta install
+bun add -g gentlesmith@beta
+# or
+pnpm add -g gentlesmith@beta
 
-# current local repo workflow while pre-release
-git clone https://github.com/diego-alfadev/gentlesmith
-cd gentlesmith
-bun install
-bun link
-
-# first real command
-gentlesmith forge
+# create a reviewable profile draft bundle
+gentlesmith forge debugger
 ```
 
-`forge` bootstraps `~/.gentlesmith` if needed, discovers your local gentle-ai/toolchain context, and writes a self-contained Workbench bundle to create or refine a profile.
+`forge` does **not** silently rewrite your agents. It creates a self-contained handoff bundle under `~/.gentlesmith/forges/` that your coding agent can use to write a local profile and fragments.
 
-Then inspect/apply from the cockpit:
+Canonical safe flow:
+
+```bash
+gentlesmith forge debugger   # draft bundle
+# give handoff.md to your agent, review the proposed local files
+gentlesmith export --profile debugger
+gentlesmith apply debugger                 # preview only
+gentlesmith apply debugger --apply         # write the switch
+```
+
+Or use the cockpit:
 
 ```bash
 gentlesmith browse
 ```
 
-Browse exposes the normal flow without memorizing paths:
+Recommended flow in Browse:
 
 ```text
-Create / forge profile
-Apply / switch profile
+Forge profile draft
+Review latest bundle
 Export / review profile
-Review pending bundle
+Preview / apply profile switch
 ```
 
-Or use the advanced CLI:
+Development from a local checkout remains possible with `bun link`, but the normal beta install is the package above.
 
-```bash
-gentlesmith apply debugger # preview switching enabled targets to local-debugger/debugger
-gentlesmith sync          # dry-run render
-gentlesmith export        # write a catalogable profile export
-gentlesmith sync --apply  # write overlays / selectable profile entries
-```
+## 5-minute model
 
-Clean start for old local installs:
+- **Profile** — a named agent behavior, e.g. `debugger`.
+- **Profile parts** — compact persona/rules/env pieces included by the profile.
+- **Preview** — default mode; shows what would change and writes review files under `~/.gentlesmith/.last-rendered`.
+- **Apply** — only happens with `--apply`.
+- **Export** — a review/share package for one profile.
 
-```bash
-mv ~/.gentlesmith ~/.gentlesmith.backup.$(date +%Y%m%d-%H%M%S)
-gentlesmith forge
-```
+## Safety model
 
-Do this only if you are comfortable rebuilding runtime state. Keep the backup until your profiles/fragments are reviewed.
+- No command writes final agent config files unless you pass `--apply` or explicitly confirm in the TUI.
+- Gentlesmith writes only managed overlay markers or `agent.gentlesmith-*` OpenCode entries.
+- `apply <profile>` previews by default; `apply <profile> --apply` writes the switch.
+- Switch back with another profile: `gentlesmith apply jarvis --apply`.
+- Legacy cleanup is reversible: move `~/.gentlesmith` aside as a backup only from Troubleshooting/Legacy installs.
 
 ## Core model
 
@@ -101,22 +105,22 @@ Primary:
 
 | Command | Purpose |
 |---|---|
-| `gentlesmith forge` | Bootstrap if needed, then start LLM-led profile forging |
-| `gentlesmith apply <profile>` | Preview/switch active profile for enabled targets |
-| `gentlesmith patch` | Create a self-contained patch bundle for profile changes |
-| `gentlesmith browse` | Inspect/edit profiles, fragments, skills, targets, and apply |
+| `gentlesmith forge [name]` | Create a reviewable profile draft bundle |
+| `gentlesmith export --profile <profile>` | Review/share a profile package |
+| `gentlesmith apply <profile>` | Preview a profile switch; writes only with `--apply` |
+| `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
 
 Advanced:
 
 | Command | Purpose |
 |---|---|
+| `gentlesmith patch` | Create a profile patch bundle from a skill/idea/markdown |
+| `gentlesmith sync [--apply]` | Render current low-level target bindings |
 | `gentlesmith init` | Deterministic runtime bootstrap only |
-| `gentlesmith sync [--apply]` | Preview or write installed targets |
-| `gentlesmith export [--profile <profile>]` | Export a catalogable profile spec, sources, rendered prompts, and diffs |
 | `gentlesmith target ...` | Manage installed target definitions |
 | `gentlesmith preset ...` | Apply fragment bundles |
-| `gentlesmith skills ...` | Discover/list/reference skills; no skill builder |
-| `gentlesmith migrate` | Explicit legacy local-state migration |
+| `gentlesmith skills ...` | Discover/list/reference/install skills explicitly |
+| `gentlesmith migrate` | Explicit legacy local-state import |
 | `gentlesmith update` | Update a git-clone install |
 
 ## Apply vs sync vs targets
@@ -126,12 +130,12 @@ Advanced:
 Most users should not need to think about them every day:
 
 ```bash
-gentlesmith apply debugger          # preview switch to local-debugger/debugger
+gentlesmith apply debugger          # preview switch to debugger/debugger
 gentlesmith apply debugger --apply  # write target bindings and rendered outputs
 gentlesmith apply jarvis --apply    # switch back
 ```
 
-By default, `apply` switches enabled targets. For OpenCode, that means Gentlesmith registers local profiles as selectable primary agents and sets `default_agent` to the selected profile.
+By default, `apply` previews switching enabled targets. For OpenCode, that means Gentlesmith registers local profiles as selectable primary agents and sets `default_agent` to the selected profile.
 
 Use explicit targets when needed:
 
@@ -139,7 +143,7 @@ Use explicit targets when needed:
 gentlesmith apply debugger --target codex
 gentlesmith apply debugger --target opencode --apply # set OpenCode default_agent
 gentlesmith sync --target codex                      # render only one target
-gentlesmith target set-profile codex local-debugger  # low-level binding
+gentlesmith target set-profile codex debugger  # low-level binding
 ```
 
 `sync` always means: render the profiles currently bound to installed targets. It does not choose a new profile for you.
@@ -178,6 +182,8 @@ That keeps Gentlesmith usable standalone while leaving a clean path for a future
 
 See `GENTLE_AI_VALUE_PROPOSITION.md` for the integration proposal.
 
+For a short teammate/maintainer walkthrough, see `DEMO.md`.
+
 ## Forge
 
 Default `forge` is LLM-first.
@@ -195,10 +201,11 @@ It does not invent its own model runtime. Instead it prepares a self-contained W
 Examples:
 
 ```bash
-gentlesmith forge --name local-debugger --from jarvis
-gentlesmith forge --profile local-diego
-gentlesmith forge --name local-reviewer --from jarvis --env-from local-diego
+gentlesmith forge debugger                 # default base, no internal names required
+gentlesmith forge --profile yourname        # improve an existing profile
+gentlesmith forge reviewer --env-from yourname
 gentlesmith forge --name mastra-worker --from surgical --env agnostic
+gentlesmith forge trading --open-with codex  # optional: launch handoff directly
 ```
 
 Env behavior:
@@ -232,7 +239,7 @@ Example: adapt an installed skill such as `grill-me` into a lighter profile beha
 Guided bundle flow:
 
 ```bash
-gentlesmith patch --profile local-diego --from-skill grill-me --level adapted
+gentlesmith patch --profile yourname --from-skill grill-me --level adapted
 ```
 
 This writes:
@@ -257,11 +264,11 @@ gentlesmith skills discover
 # ~/.gentlesmith/fragments-local/persona/learning-coach.md
 
 # 3. Add that fragment to the profile
-# ~/.gentlesmith/profiles/local-diego.yaml
+# ~/.gentlesmith/profiles/yourname.yaml
 
 # 4. Preview and export before applying
 gentlesmith sync
-gentlesmith export --profile local-diego
+gentlesmith export --profile yourname
 
 # 5. Apply only after reviewing summary.md and diffs/
 gentlesmith sync --apply
@@ -279,8 +286,8 @@ Rule of thumb:
 `export` is not only for your active local targets. It writes a reviewable profile package that can be shared, compared, or used as the seed for future catalog/marketplace workflows.
 
 ```bash
-gentlesmith export --profile local-diego
-gentlesmith export --profile local-debugger --out /tmp/local-debugger-export
+gentlesmith export --profile yourname
+gentlesmith export --profile debugger --out /tmp/debugger-export
 ```
 
 Each export includes:

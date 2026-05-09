@@ -14,30 +14,46 @@ Cross-platform setup guide for **macOS / Linux / Windows**.
 
 ## Step 1 — Install
 
-Preferred once published:
+Beta install:
 
 ```bash
-bun add -g gentlesmith
+bun add -g gentlesmith@beta
 # or
-pnpm add -g gentlesmith
+pnpm add -g gentlesmith@beta
 ```
 
-Current pre-release repo workflow:
+Development from a local checkout remains available with `bun link`, but the package install is the normal path.
+
+## Step 2 — Forge a profile draft
 
 ```bash
-git clone https://github.com/diego-alfadev/gentlesmith
-cd gentlesmith
-bun install
-bun link
+gentlesmith forge debugger
 ```
 
-## Step 2 — Forge your local profile
+`forge` bootstraps `~/.gentlesmith` if needed and writes a reviewable handoff bundle under `~/.gentlesmith/forges/`. Give its `handoff.md` to your coding agent; it will propose/write local profile files under `~/.gentlesmith`.
+
+## Step 3 — Review, preview, apply
 
 ```bash
-gentlesmith forge
+gentlesmith export --profile debugger
+gentlesmith apply debugger          # preview only
+gentlesmith apply debugger --apply  # write profile switch
 ```
 
-`forge` bootstraps `~/.gentlesmith` if needed, discovers gentle-ai/OpenCode/Engram/Context7/skills, and writes a self-contained Workbench bundle for profile refinement.
+Use the cockpit if you prefer guided navigation:
+
+```bash
+gentlesmith browse
+```
+
+Safety contract:
+
+- no final agent config writes without `--apply` or TUI confirmation;
+- previews are written under `~/.gentlesmith/.last-rendered/`;
+- exports are written under `~/.gentlesmith/exports/`;
+- switch back with `gentlesmith apply jarvis --apply`.
+
+## Advanced / legacy setup
 
 If you only want deterministic bootstrap:
 
@@ -51,43 +67,16 @@ Manual deterministic forge fallback:
 gentlesmith forge --manual
 ```
 
-## Step 3 — Browse, apply, export
+If you used an old pre-release runtime and want a fresh start, back it up instead of deleting it:
 
 ```bash
-gentlesmith browse                  # cockpit
-gentlesmith apply debugger          # preview switching active profile
-gentlesmith apply debugger --apply  # write profile switch
-gentlesmith export --profile local-debugger
-```
-
-Check previews in `~/.gentlesmith/.last-rendered/` and exports in `~/.gentlesmith/exports/` before applying irreversible changes.
-
-`sync` renders installed targets without choosing a new profile:
-
-```bash
-gentlesmith sync              # dry-run current target bindings
-gentlesmith sync --apply      # write current target bindings
-gentlesmith sync --target codex
-```
-
-Advanced target binding remains available:
-
-```bash
-gentlesmith target set-profile claude local-yourname
-```
-
-## Clean start from an older install
-
-If you used an old pre-release runtime and want a fresh start:
-
-```bash
-mv ~/.gentlesmith ~/.gentlesmith.backup.$(date +%Y%m%d-%H%M%S)
-gentlesmith forge
+[ -d ~/.gentlesmith ] && mv ~/.gentlesmith ~/.gentlesmith.backup.$(date +%Y%m%d-%H%M%S)
 ```
 
 Keep the backup until you have copied any personal profiles/fragments you still need.
 
 ## Optional local env files
+
 
 Use this only if you want agents to read local constants, aliases, or machine context. These files live in your home directory. **Never commit them.**
 
@@ -118,7 +107,13 @@ ni $HOME/.secrets
 Add to your PowerShell profile (`notepad $PROFILE`):
 ```powershell
 # Load agent env
-if (Test-Path "$HOME/.secrets.agents") { Get-Content "$HOME/.secrets.agents" | ForEach-Object { if ($_ -match '^export\s+(\w+)=(.*)$') { [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim('"'), 'Process') } }
+if (Test-Path "$HOME/.secrets.agents") {
+  Get-Content "$HOME/.secrets.agents" | ForEach-Object {
+    if ($_ -match '^export\s+(\w+)=(.*)$') {
+      [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim('"'), 'Process')
+    }
+  }
+}
 
 # Optional: your private creds
 # if (Test-Path "$HOME/.secrets") { ... }
@@ -182,7 +177,7 @@ OpenCode selectable profiles use:
 
 ```yaml
 agent: opencode
-profile: local-yourname
+profile: yourname
 destination: ~/.config/opencode/opencode.json
 mode: opencode-agent
 ```

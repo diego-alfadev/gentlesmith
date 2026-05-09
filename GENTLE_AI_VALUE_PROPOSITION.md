@@ -26,7 +26,7 @@ Gentle AI principle:
 Gentlesmith should follow the same principle:
 
 ```bash
-gentlesmith forge debugger
+gentlesmith forge debugger --from jarvis
 gentlesmith apply debugger --apply
 gentlesmith apply jarvis --apply
 ```
@@ -73,6 +73,17 @@ This gives OpenCode users a native-feeling Tab-selectable profile system while p
 - A path to a future profile marketplace/catalog.
 - A compatible external profile manager for OpenCode.
 
+
+## Ask for gentle-ai maintainers
+
+For the beta, the ask is intentionally small:
+
+1. Validate the ownership boundary: gentle-ai owns ecosystem setup; Gentlesmith owns user profile composition.
+2. Approve or critique the OpenCode namespace contract: Gentlesmith owns only `agent.gentlesmith-*` and switches `default_agent` only when the user applies a Gentlesmith profile.
+3. If this direction fits, list Gentlesmith as a companion/community CLI while we defer any official plugin/TUI transport decision.
+
+Non-goal for this ask: no immediate plugin commitment, no transfer of gentle-ai responsibilities, no hidden bridge dependency.
+
 ## Proposed integration options
 
 ### Option A — Companion CLI first
@@ -108,9 +119,9 @@ Immediate goal: make Gentlesmith a polished external profile manager that gentle
 
 ## Beta readiness checklist
 
-- [ ] Commit and verify `apply <profile>`.
-- [ ] Finalize OpenCode all-profile sync + `default_agent` activation.
-- [ ] Add Browse/TUI actions for forge/apply/export.
-- [ ] Update quickstart around `forge → apply → export`.
-- [ ] Package/install path via npm/pnpm/bun.
-- [ ] Create a short demo script for Miguel/gentle-ai maintainers.
+- [x] Commit and verify `apply <profile>`.
+- [x] Finalize OpenCode all-profile sync + `default_agent` activation.
+- [x] Add Browse/TUI actions for forge/apply/export.
+- [x] Update quickstart around `forge → apply → export`.
+- [x] Package/install path via npm/pnpm/bun.
+- [x] Create a short demo script for Miguel/gentle-ai maintainers.

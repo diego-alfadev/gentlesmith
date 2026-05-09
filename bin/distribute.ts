@@ -2,7 +2,7 @@
 
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYAML } from "yaml";
 import {
@@ -56,6 +56,33 @@ interface PerFragmentPlan {
   profile: ProfileSpec;
   destinationDir: string;
   operations: Array<{ kind: "create" | "update" | "delete"; path: string; content?: string }>;
+}
+
+async function persistPerFragmentPreview(plan: PerFragmentPlan): Promise<void> {
+  const lines = [
+    `# gentlesmith per-fragment preview: ${plan.targetName}`,
+    "",
+    `profile: ${plan.profile.name}`,
+    `destination: ${plan.destinationDir}`,
+    "",
+    "## Operations",
+    "",
+  ];
+
+  if (plan.operations.length === 0) {
+    lines.push("No changes.", "");
+  } else {
+    for (const op of plan.operations) {
+      lines.push(`### ${op.kind.toUpperCase()} ${op.path}`, "");
+      if (op.kind === "delete") {
+        lines.push("Stale Gentlesmith-managed fragment would be deleted.", "");
+      } else {
+        lines.push("```md", op.content ?? "", "```", "");
+      }
+    }
+  }
+
+  await writeRuntimeFile(join(PATHS.renderedDir, `${plan.targetName}.md`), lines.join("\n"));
 }
 
 function isGentlesmithRepo(dir: string): boolean {
@@ -325,9 +352,9 @@ function summarizePerFragment(plan: PerFragmentPlan, apply: boolean) {
   }
 
   console.log(`  action:       ${verb} ${creates.length} create / ${updates.length} update / ${deletes.length} delete`);
-  for (const op of creates) console.log(`    + ${op.path.split("/").pop()}  (create)`);
-  for (const op of updates) console.log(`    ~ ${op.path.split("/").pop()}  (update)`);
-  for (const op of deletes) console.log(`    - ${op.path.split("/").pop()}  (delete — stale)`);
+  for (const op of creates) console.log(`    + ${basename(op.path)}  (create)`);
+  for (const op of updates) console.log(`    ~ ${basename(op.path)}  (update)`);
+  for (const op of deletes) console.log(`    - ${basename(op.path)}  (delete — stale)`);
 }
 
 async function persistRendered(plan: RenderPlan) {
@@ -366,7 +393,7 @@ async function buildOpenCodeProfileInputs(agentName: string, requiredProfileName
 function runUpdate(): void {
   if (!existsSync(join(PACKAGE_ROOT, ".git"))) {
     console.error("ERROR: gentlesmith was not installed via git clone — cannot self-update.");
-    console.error("To update a global install: bun add -g gentlesmith");
+    console.error("To update a global beta install: bun add -g gentlesmith@beta");
     process.exit(1);
   }
 
@@ -381,14 +408,20 @@ function runUpdate(): void {
   console.log("\ngentlesmith updated.");
 }
 
-function invokeSkillsBridge(skills: string[], apply: boolean) {
+function invokeSkillsBridge(skills: string[], options: { apply: boolean; install: boolean }) {
   const unique = Array.from(new Set(skills.filter((skill) => typeof skill === "string" && skill.trim().length > 0)));
   if (unique.length === 0) return;
 
   console.log(`\n━━━ skills-bridge (${unique.length} declared) ━━━`);
-  if (!apply) {
+  if (!options.install) {
+    for (const skill of unique) console.log(`  declared: ${skill}`);
+    console.log("  no install side effects; use `gentlesmith skills install` to install declared skills");
+    return;
+  }
+
+  if (!options.apply) {
     for (const skill of unique) console.log(`  would install: ${skill}`);
-    console.log("  (dry-run — re-run with --apply to invoke npx skills add)");
+    console.log("  dry-run; re-run with --apply --install-skills to install declared skills");
     return;
   }
 
@@ -411,6 +444,7 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
 
   const args = [...rawArgs];
   const apply = args.includes("--apply");
+  const installSkills = args.includes("--install-skills");
   const targetIdx = args.indexOf("--target");
   const filter = targetIdx >= 0 ? args[targetIdx + 1] : undefined;
 
@@ -449,6 +483,7 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
       const plan = await planPerFragmentTarget(name, spec, args);
       if (!plan) continue;
       summarizePerFragment(plan, apply);
+      await persistPerFragmentPreview(plan);
       if (apply) await applyPerFragmentPlan(plan);
     } else {
       const plan = await planTarget(name, spec, args);
@@ -465,7 +500,7 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
     }
   }
 
-  invokeSkillsBridge(collectedSkills, apply);
+  invokeSkillsBridge(collectedSkills, { apply, install: installSkills });
   console.log(`\nRendered previews saved to: ${PATHS.renderedDir}`);
   if (!apply) console.log("Re-run with `gentlesmith sync --apply` to write changes.");
 }
@@ -473,6 +508,7 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
 interface ApplyArgs {
   profileName?: string;
   apply: boolean;
+  installSkills: boolean;
   targetNames: string[];
 }
 
@@ -481,11 +517,24 @@ type ApplyPlan =
   | { kind: "per-fragment"; target: NamedTarget; updatedSpec: TargetSpec; plan: PerFragmentPlan }
   | { kind: "opencode"; target: NamedTarget; updatedSpec: TargetSpec; plan: Awaited<ReturnType<typeof planOpenCodeProfiles>> };
 
+async function persistApplyPreview(item: ApplyPlan): Promise<void> {
+  if (item.kind === "managed") {
+    await persistRendered(item.plan);
+    return;
+  }
+  if (item.kind === "opencode") {
+    await writeRuntimeFile(join(PATHS.renderedDir, `${item.target.name}.md`), item.plan.finalContent);
+    return;
+  }
+
+  await persistPerFragmentPreview(item.plan);
+}
+
 async function runApply(rawArgs: string[]): Promise<void> {
   await ensureRuntimeState(PATHS);
   const args = parseApplyArgs(rawArgs);
   if (!args.profileName) {
-    console.error("Usage: gentlesmith apply <profile> [--apply] [--target <name>]");
+    console.error("Usage: gentlesmith apply <profile> [--apply] [--target <name>] [--install-skills]");
     process.exit(1);
   }
 
@@ -536,10 +585,12 @@ async function runApply(rawArgs: string[]): Promise<void> {
   }
 
   const profile = await loadProfile(PATHS, profileName);
-  invokeSkillsBridge(profile.skills ?? [], args.apply);
+  invokeSkillsBridge(profile.skills ?? [], { apply: args.apply, install: args.installSkills });
 
   if (!args.apply) {
-    console.log("\nNo files changed.");
+    for (const item of plans) await persistApplyPreview(item);
+    console.log(`\nRendered previews saved to: ${PATHS.renderedDir}`);
+    console.log("No files changed.");
     console.log(`Re-run with \`gentlesmith apply ${profileName} --apply\` to switch these targets.`);
     return;
   }
@@ -561,7 +612,7 @@ async function runApply(rawArgs: string[]): Promise<void> {
 }
 
 async function resolveProfileAlias(input: string): Promise<string> {
-  const candidates = input.startsWith("local-") ? [input] : [`local-${input}`, input];
+  const candidates = input.startsWith("local-") ? [input] : [input, `local-${input}`];
   for (const candidate of candidates) {
     try {
       await loadProfile(PATHS, candidate);
@@ -579,6 +630,7 @@ function parseApplyArgs(args: string[]): ApplyArgs {
   return {
     profileName: readApplyProfileName(args),
     apply: args.includes("--apply"),
+    installSkills: args.includes("--install-skills"),
     targetNames: readRepeatedFlag(args, "--target"),
   };
 }
@@ -627,27 +679,28 @@ function resolveApplyTargets(enabledTargets: NamedTarget[], args: ApplyArgs): Na
 }
 
 function printUsage(): void {
-  console.log(`gentlesmith — compose local AI-agent behavior from fragments
+  console.log(`gentlesmith — forge, review, and switch AI-agent profiles
 
-Usage:
-  gentlesmith forge              bootstrap if needed, then start LLM-led profile forging
-  gentlesmith apply <profile>    switch active profile for enabled targets
-  gentlesmith patch              create a self-contained profile patch bundle
-  gentlesmith browse             inspect, edit, and apply profiles from the TUI
+Recommended flow:
+  gentlesmith forge debugger                 create a reviewable profile draft bundle
+  gentlesmith export --profile debugger       review/share the profile package
+  gentlesmith apply debugger                 preview the profile switch
+  gentlesmith apply debugger --apply         write the switch
+
+Primary:
+  gentlesmith forge [name]       create a reviewable profile draft bundle
+  gentlesmith export             review/share a profile package
+  gentlesmith apply <profile>    preview profile switch (writes only with --apply)
+  gentlesmith browse             guided cockpit for forge/review/export/apply
 
 Advanced:
+  gentlesmith patch              create a profile patch bundle
+  gentlesmith sync [--apply]     render current low-level target bindings
+  gentlesmith target ...         manage installed target definitions
+  gentlesmith skills ...         discover/list/reference/install skills explicitly
   gentlesmith init               deterministic runtime bootstrap
-  gentlesmith forge --name <profile> --from <base>
-  gentlesmith forge --profile <profile>
-  gentlesmith apply <profile> [--apply] [--target <name>]
-  gentlesmith sync [--apply] [--target <name>]
-  gentlesmith export [--profile <profile>] [--out <dir>]
-  gentlesmith target <list|add|set-profile|enable|disable|remove|purge> [name]
-  gentlesmith skills <list|add|install|find>
-  gentlesmith preset list
-  gentlesmith preset add <name> [--profile <profile>]
-  gentlesmith migrate
-  gentlesmith update
+  gentlesmith migrate            import legacy local state
+  gentlesmith update             update a git-clone install
 `);
 }
 
@@ -672,7 +725,12 @@ async function runMigrate(): Promise<void> {
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
 
-  if (!command || command === "help" || command === "--help" || command === "-h") {
+  if (!command) {
+    const { runBrowse } = await import("./browse");
+    await runBrowse();
+    return;
+  }
+  if (command === "help" || command === "--help" || command === "-h") {
     printUsage();
     return;
   }

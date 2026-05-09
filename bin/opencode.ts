@@ -20,6 +20,7 @@ export interface OpenCodeProfileInput {
 export interface OpenCodeProfilesPlan {
   configPath: string;
   agentKeys: string[];
+  prunedAgentKeys: string[];
   defaultAgentKey?: string;
   changeType: "create-config" | "update-config" | "noop";
   finalContent: string;
@@ -91,11 +92,24 @@ export async function planOpenCodeProfiles(
   const config = structuredClone(before);
   const agent = isPlainObject(config.agent) ? { ...config.agent } : {};
   const agentKeys: string[] = [];
+  const desiredAgentKeys = new Set<string>();
 
   for (const { profile, prompt } of profiles) {
     const agentKey = profileToAgentKey(profile.name);
+    if (desiredAgentKeys.has(agentKey)) {
+      throw new Error(`OpenCode agent key collision for profile "${profile.name}": ${agentKey}`);
+    }
+    desiredAgentKeys.add(agentKey);
     agentKeys.push(agentKey);
     agent[agentKey] = buildAgentEntry(profile, prompt);
+  }
+
+  const prunedAgentKeys: string[] = [];
+  for (const key of Object.keys(agent)) {
+    if (!key.startsWith("gentlesmith-")) continue;
+    if (desiredAgentKeys.has(key)) continue;
+    delete agent[key];
+    prunedAgentKeys.push(key);
   }
 
   config.agent = agent;
@@ -104,6 +118,12 @@ export async function planOpenCodeProfiles(
   if (options.defaultProfileName) {
     defaultAgentKey = profileToAgentKey(options.defaultProfileName);
     config.default_agent = defaultAgentKey;
+  } else if (
+    typeof config.default_agent === "string" &&
+    config.default_agent.startsWith("gentlesmith-") &&
+    !desiredAgentKeys.has(config.default_agent)
+  ) {
+    delete config.default_agent;
   }
 
   const finalContent = `${JSON.stringify(config, null, 2)}\n`;
@@ -117,6 +137,7 @@ export async function planOpenCodeProfiles(
   return {
     configPath,
     agentKeys,
+    prunedAgentKeys,
     defaultAgentKey,
     changeType,
     finalContent,
@@ -210,6 +231,7 @@ export function summarizeOpenCodeProfilesPlan(plan: OpenCodeProfilesPlan, apply:
   console.log(`  destination:   ${plan.configPath}`);
   console.log(`  action:        ${action}`);
   console.log(`  agents:        ${plan.agentKeys.join(", ")}`);
+  if (plan.prunedAgentKeys.length > 0) console.log(`  pruned:        ${plan.prunedAgentKeys.join(", ")}`);
   if (plan.defaultAgentKey) console.log(`  default_agent: ${plan.defaultAgentKey}`);
   console.log("  owns:          agent.gentlesmith-* and default_agent only when set to gentlesmith-*");
 }

@@ -85,8 +85,9 @@ export async function runPatch(args: string[]): Promise<void> {
   console.log("Next:");
   console.log(`  1. Give ${join(outDir, "handoff.md")} to your agent.`);
   console.log(`  2. Let it write runtime-local fragments/profile changes.`);
-  console.log(`  3. Review with: gentlesmith export --profile ${reviewProfile}`);
-  console.log("  4. Apply only after review: gentlesmith sync --apply");
+  console.log(`  3. Review: gentlesmith export --profile ${reviewProfile}`);
+  console.log(`  4. Preview: gentlesmith apply ${reviewProfile.replace(/^local-/, "")}`);
+  console.log(`  5. Apply:  gentlesmith apply ${reviewProfile.replace(/^local-/, "")} --apply`);
 }
 
 function parseArgs(args: string[]): PatchArgs {

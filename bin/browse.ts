@@ -5,8 +5,9 @@
 
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
 import { checkbox, confirm, input, select, Separator } from "@inquirer/prompts";
 import type { ExitPromptError as ExitPromptErrorType } from "@inquirer/core";
 import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
@@ -108,7 +109,23 @@ function openPathInEditor(path: string, kind: "file" | "folder"): void {
 function openPathsInCode(paths: string[]): boolean {
   const code = spawnSync("which", ["code"], { stdio: "pipe" });
   if (code.status !== 0) return false;
-  spawnSync("code", paths, { stdio: "inherit" });
+  return reportChildResult(spawnSync("code", paths, { stdio: "inherit" }), `code ${paths.join(" ")}`);
+}
+
+function runGentlesmith(args: string[]): boolean {
+  const result = spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), ...args], { stdio: "inherit" });
+  return reportChildResult(result, `gentlesmith ${args.join(" ")}`);
+}
+
+function reportChildResult(result: SpawnSyncReturns<Buffer>, label: string): boolean {
+  if (result.error) {
+    console.error(`\n  ${c.red("✗")} ${label} failed: ${result.error.message}\n`);
+    return false;
+  }
+  if (result.status !== 0) {
+    console.error(`\n  ${c.red("✗")} ${label} exited with status ${result.status ?? "unknown"}\n`);
+    return false;
+  }
   return true;
 }
 
@@ -563,7 +580,7 @@ async function openProfile(selectedPath?: string) {
 }
 
 async function writeProfileWorkspace(profilePath: string): Promise<string> {
-  const profileName = profilePath.split("/").pop()!.replace(/\.yaml$/, "");
+  const profileName = basename(profilePath).replace(/\.yaml$/, "");
   const workspaceDir = join(PATHS.runtimeHome, "workspaces");
   const workspacePath = join(workspaceDir, `${profileName}.code-workspace`);
   await mkdir(workspaceDir, { recursive: true });
@@ -607,6 +624,10 @@ async function openFragment(fragments?: FragmentInfo[]) {
   openPathInEditor(fragment.path, "file");
 }
 
+function isSafeFragmentCategory(value: string): boolean {
+  return /^[a-z0-9][a-z0-9-]*(\/[a-z0-9][a-z0-9-]*)*$/.test(value);
+}
+
 async function scaffoldFragment() {
   banner("New Fragment");
   const category = await select({
@@ -620,7 +641,10 @@ async function scaffoldFragment() {
   });
 
   const actualCategory = category === "_custom"
-    ? (await input({ message: "Category name:", validate: (value) => value.trim().length > 0 || "Cannot be empty" })).trim().toLowerCase()
+    ? (await input({
+      message: "Category name:",
+      validate: (value) => isSafeFragmentCategory(value.trim()) || "Use safe path segments like `references` or `rules/project`",
+    })).trim().toLowerCase()
     : category;
   const name = (await input({
     message: "Fragment name (kebab-case):",
@@ -631,16 +655,7 @@ async function scaffoldFragment() {
     default: name.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
   })).trim();
 
-  const location = await select({
-    message: "Where to create?",
-    choices: [
-      { name: `fragments-local/${actualCategory}/${name}.md  ${c.dim("(personal, runtime-home)")}`, value: "local" },
-      { name: `fragments/${actualCategory}/${name}.md  ${c.dim("(shared, committed)")}`, value: "repo" },
-    ],
-  });
-
-  const root = location === "local" ? PATHS.localFragmentsDir : PATHS.builtInFragmentsDir;
-  const filePath = join(root, `${actualCategory}/${name}.md`);
+  const filePath = join(PATHS.localFragmentsDir, `${actualCategory}/${name}.md`);
   if (existsSync(filePath)) {
     console.log(`\n  ${c.yellow("Already exists:")} ${filePath}\n`);
     await pause();
@@ -657,7 +672,7 @@ async function scaffoldFragment() {
 
 async function dryRun() {
   banner("Dry-run");
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "sync"], { stdio: "inherit" });
+  runGentlesmith(["sync"]);
   console.log("");
   await pause();
 }
@@ -666,8 +681,7 @@ async function applyNow() {
   banner("Apply Current Bindings");
   const ok = await confirm({ message: "Write current target bindings to agent config files?", default: true });
   if (!ok) return;
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "sync", "--apply"], { stdio: "inherit" });
-  console.log(`\n  ${c.green("✓")} Done.\n`);
+  if (runGentlesmith(["sync", "--apply"])) console.log(`\n  ${c.green("✓")} Done.\n`);
   await pause();
 }
 
@@ -690,7 +704,11 @@ async function applyProfile() {
 
   banner(`Apply: ${profileName}`);
   console.log(`  Previewing switch to ${c.cyan(profileName)}...\n`);
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "apply", profileName], { stdio: "inherit" });
+  const previewOk = runGentlesmith(["apply", profileName]);
+  if (!previewOk) {
+    await pause();
+    return;
+  }
 
   const ok = await confirm({ message: `Apply ${profileName} now?`, default: false });
   if (!ok) {
@@ -699,8 +717,9 @@ async function applyProfile() {
     return;
   }
 
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "apply", profileName, "--apply"], { stdio: "inherit" });
-  console.log(`\n  ${c.green("✓")} Applied ${c.cyan(profileName)}.\n`);
+  if (runGentlesmith(["apply", profileName, "--apply"])) {
+    console.log(`\n  ${c.green("✓")} Applied ${c.cyan(profileName)}.\n`);
+  }
   await pause();
 }
 
@@ -721,16 +740,38 @@ async function exportProfile() {
     })),
   });
 
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "export", "--profile", profileName], { stdio: "inherit" });
+  runGentlesmith(["export", "--profile", profileName]);
   console.log("");
   await pause();
 }
 
 async function forgeProfile() {
-  banner("Create / Forge Profile");
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "forge"], { stdio: "inherit" });
+  banner("Forge Profile");
+  const profileName = await input({
+    message: "What profile do you want to create?",
+    default: "debugger",
+    validate: (value) => value.trim().length > 0 || "Use a short profile name",
+  });
+  const openWith = await select({
+    message: "Open the handoff now?",
+    choices: handoffChoices(),
+  });
+  const args = ["forge", profileName.trim()];
+  if (openWith !== "none") args.push("--open-with", openWith);
+  runGentlesmith(args);
   console.log("");
   await pause();
+}
+
+function handoffChoices() {
+  return [
+    { name: "No — just create the bundle", value: "none" },
+    { name: "Open workspace in editor", value: "editor" },
+    { name: "Open with Codex", value: "codex" },
+    { name: "Open with OpenCode", value: "opencode" },
+    { name: "Open with Claude", value: "claude" },
+    { name: "Open with Gemini", value: "gemini" },
+  ];
 }
 
 async function improveProfile() {
@@ -750,14 +791,20 @@ async function improveProfile() {
     })),
   });
 
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "forge", "--profile", profileName], { stdio: "inherit" });
+  const openWith = await select({
+    message: "Open the handoff now?",
+    choices: handoffChoices(),
+  });
+  const args = ["forge", "--profile", profileName];
+  if (openWith !== "none") args.push("--open-with", openWith);
+  runGentlesmith(args);
   console.log("");
   await pause();
 }
 
 async function patchProfile() {
   banner("Patch Profile");
-  spawnSync("bun", [join(PACKAGE_ROOT, "bin/distribute.ts"), "patch"], { stdio: "inherit" });
+  runGentlesmith(["patch"]);
   console.log("");
   await pause();
 }
@@ -786,10 +833,11 @@ async function reviewPendingBundle() {
 
   const handoff = join(picked, "handoff.md");
   const context = join(picked, "context.json");
-  if (!openPathsInCode([picked, handoff, context].filter((path) => existsSync(path)))) {
+  const opened = openPathsInCode([picked, handoff, context].filter((path) => existsSync(path)));
+  if (!opened) {
     openPathInEditor(picked, "folder");
   }
-  console.log(`\n  ${c.green("✓")} Opened bundle workspace.`);
+  if (opened) console.log(`\n  ${c.green("✓")} Opened bundle workspace.`);
   console.log(`  ${c.dim(picked)}\n`);
   await pause();
 }
@@ -835,26 +883,26 @@ export async function runBrowse(): Promise<void> {
         message: "What do you want to do?",
         choices: [
           new Separator(c.dim("── workbench ──")),
-          { name: `${c.green("✦")} Create / forge profile`, value: "forge" },
-          { name: `${c.green("✦")} Improve existing profile`, value: "improve" },
-          { name: `${c.green("✦")} Apply / switch profile`, value: "apply-profile" },
-          { name: `${c.green("✦")} Export / review profile`, value: "export-profile" },
-          { name: `${c.green("✦")} Patch from skill / markdown / idea`, value: "patch" },
-          { name: `${c.yellow("◈")} Review pending bundle`, value: "bundle" },
+          { name: `${c.green("Create")} profile`, value: "forge" },
+          { name: `${c.green("Improve")} profile`, value: "improve" },
+          { name: `${c.green("Apply")} profile switch`, value: "apply-profile" },
+          { name: `${c.green("Review")} export/profile`, value: "export-profile" },
+          { name: `${c.yellow("Open")} latest handoff bundle`, value: "bundle" },
+          { name: `${c.dim("Advanced")} patch from skill / idea`, value: "patch" },
           new Separator(c.dim("── explore ──")),
           { name: `${c.cyan("◉")} Discovery snapshot`, value: "discovery" },
           { name: `${c.cyan("◉")} View fragments`, value: "fragments" },
           { name: `${c.cyan("◉")} View profiles`, value: "profiles" },
           { name: `${c.cyan("◉")} Inspect a profile`, value: "detail" },
           { name: `${c.cyan("◉")} View skills`, value: "skills" },
-          { name: `${c.cyan("◉")} View installed targets`, value: "targets" },
+          { name: `${c.cyan("◉")} Advanced: view targets`, value: "targets" },
           new Separator(c.dim("── manage ──")),
           { name: `${c.green("✎")} Edit a profile`, value: "edit" },
-          { name: `${c.green("+")} Create a profile`, value: "create" },
-          { name: `${c.green("+")} New fragment`, value: "scaffold" },
+          { name: `${c.green("+")} Advanced: create profile manually`, value: "create" },
+          { name: `${c.green("+")} Advanced: new local fragment`, value: "scaffold" },
           new Separator(c.dim("── render ──")),
-          { name: `${c.yellow("▶")} Dry-run sync`, value: "dryrun" },
-          { name: `${c.magenta("▶")} Apply current target bindings`, value: "apply" },
+          { name: `${c.yellow("▶")} Advanced: dry-run low-level sync`, value: "dryrun" },
+          { name: `${c.magenta("▶")} Advanced: apply current bindings`, value: "apply" },
           new Separator(""),
           { name: `${c.dim("exit")}`, value: "exit" },
         ],

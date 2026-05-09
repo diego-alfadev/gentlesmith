@@ -83,8 +83,8 @@ export function buildProfileWorkbenchContext(input: BuildWorkbenchContextInput):
     allowedWrites: defaultAllowedWrites(input.paths),
     verifyCommands: [
       `gentlesmith export --profile ${reviewProfile}`,
-      "gentlesmith sync",
-      "gentlesmith sync --apply",
+      `gentlesmith apply ${reviewProfile.replace(/^local-/, "")}`,
+      `gentlesmith apply ${reviewProfile.replace(/^local-/, "")} --apply`,
     ],
     discovery: input.discovery,
   };
@@ -183,9 +183,9 @@ After writing runtime-local changes, run or ask the user to run:
 
 \`\`\`bash
 ${context.verifyCommands[0]}
-gentlesmith sync
+${context.verifyCommands[1]}
 # only after review:
-gentlesmith sync --apply
+${context.verifyCommands[2]}
 \`\`\`
 `;
 }
@@ -276,9 +276,9 @@ After writing runtime-local changes, run or ask the user to run:
 
 \`\`\`bash
 ${context.verifyCommands[0]}
-gentlesmith sync
+${context.verifyCommands[1]}
 # only after review:
-gentlesmith sync --apply
+${context.verifyCommands[2]}
 \`\`\`
 `;
 }
@@ -305,7 +305,7 @@ gentlesmith sync
 Apply only after review:
 
 \`\`\`bash
-gentlesmith sync --apply
+gentlesmith apply <profile> --apply
 \`\`\`
 `;
 }

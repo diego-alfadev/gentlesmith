@@ -93,7 +93,8 @@ export async function runExport(args: string[]): Promise<void> {
   summary.push("");
 
   if (targets.length > 0) {
-    runSyncForProfile(profileName);
+    const renderTargets = targets.filter((target) => target.spec.mode !== "opencode-agent");
+    if (renderTargets.length > 0) runSyncForProfile(profileName, renderTargets.map((target) => target.name));
     for (const target of targets) {
       targetSummaries.push(await exportTarget(outDir, target.name, target.spec, summary));
     }
@@ -163,6 +164,28 @@ async function exportTarget(outDir: string, name: string, spec: TargetSpec, summ
     return targetSummary;
   }
 
+  if (spec.mode === "opencode-agent") {
+    const summaryOut = join(outDir, "rendered", `${name}.md`);
+    const sanitized = [
+      `# OpenCode target export: ${name}`,
+      "",
+      "Full OpenCode rendered config is omitted from profile exports because it can contain prompts for unrelated local profiles.",
+      "Gentlesmith still records target applicability here; use `gentlesmith sync --target opencode` locally to inspect the full machine-specific render.",
+      "",
+      `destination: ${destination}`,
+      `profile: ${spec.profile}`,
+      "",
+    ].join("\n");
+    await mkdir(dirname(summaryOut), { recursive: true });
+    await writeFile(summaryOut, sanitized, "utf8");
+    targetSummary.renderedPath = relative(outDir, summaryOut);
+    targetSummary.renderedLines = sanitized.split("\n").length;
+    summary.push(`- rendered: ${targetSummary.renderedPath} (sanitized; full OpenCode config omitted)`);
+    summary.push(`- rendered lines: ${targetSummary.renderedLines}`);
+    summary.push("- diff: not applicable for opencode selectable profile", "");
+    return targetSummary;
+  }
+
   if (!existsSync(renderedPath)) {
     summary.push("- rendered: not available", "");
     return targetSummary;
@@ -177,11 +200,6 @@ async function exportTarget(outDir: string, name: string, spec: TargetSpec, summ
   targetSummary.renderedLines = rendered.split("\n").length;
   summary.push(`- rendered: ${targetSummary.renderedPath}`);
   summary.push(`- rendered lines: ${targetSummary.renderedLines}`);
-
-  if (spec.mode === "opencode-agent") {
-    summary.push("- diff: not applicable for opencode selectable profile", "");
-    return targetSummary;
-  }
 
   const diffOut = join(outDir, "diffs", `${name}.diff`);
   await mkdir(dirname(diffOut), { recursive: true });
@@ -272,15 +290,17 @@ async function updateExportsIndex(catalog: CatalogExportSpec): Promise<void> {
   await writeFile(indexPath, JSON.stringify({ schemaVersion: 1, exports: exportsList }, null, 2) + "\n", "utf8");
 }
 
-function runSyncForProfile(profileName: string): void {
-  const result = spawnSync("bun", [join(PATHS.packageRoot, "bin/distribute.ts"), "sync"], {
-    env: { ...process.env, GENTLESMITH_HOME: PATHS.runtimeHome },
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    process.stderr.write(result.stdout);
-    process.stderr.write(result.stderr);
-    throw new Error(`sync failed while exporting profile ${profileName}`);
+function runSyncForProfile(profileName: string, targetNames: string[]): void {
+  for (const targetName of targetNames) {
+    const result = spawnSync("bun", [join(PATHS.packageRoot, "bin/distribute.ts"), "sync", "--target", targetName], {
+      env: { ...process.env, GENTLESMITH_HOME: PATHS.runtimeHome },
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      process.stderr.write(result.stdout);
+      process.stderr.write(result.stderr);
+      throw new Error(`sync failed while exporting profile ${profileName} target ${targetName}`);
+    }
   }
 }
 

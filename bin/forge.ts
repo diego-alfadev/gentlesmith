@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { confirm, input, select } from "@inquirer/prompts";
 import type { ExitPromptError as ExitPromptErrorType } from "@inquirer/core";
 import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
@@ -59,6 +60,7 @@ interface ForgeArgs {
   env: EnvMode;
   envFrom?: string;
   manual: boolean;
+  openWith?: string;
 }
 
 interface ForgeProfileChoice {
@@ -78,13 +80,15 @@ interface EnvBaseline {
 }
 
 function parseForgeArgs(args: string[]): ForgeArgs {
+  const name = readFlag(args, "--name") ?? readPositionalName(args);
   return {
-    name: readFlag(args, "--name"),
+    name,
     from: readFlag(args, "--from"),
     profile: readFlag(args, "--profile"),
     out: readFlag(args, "--out"),
     env: parseEnvMode(readFlag(args, "--env")),
     envFrom: readFlag(args, "--env-from"),
+    openWith: readFlag(args, "--open-with") ?? (args.includes("--open") ? "editor" : undefined),
     manual: args.includes("--manual") || args.includes("--local"),
   };
 }
@@ -146,19 +150,19 @@ export async function runForge(args = process.argv.slice(3)): Promise<void> {
   console.log(`\nForged profile: ${plan.profileName}`);
   console.log("Next steps:");
   console.log("  1. Review generated fragments in ~/.gentlesmith/fragments-local/");
-  console.log("  2. Preview render: gentlesmith sync");
-  console.log("  3. Apply render:   gentlesmith sync --apply");
+  console.log(`  2. Preview switch: gentlesmith apply ${plan.profileName}`);
+  console.log(`  3. Apply switch:   gentlesmith apply ${plan.profileName} --apply`);
 }
 
 async function writeForgeBundle(args: ForgeArgs, snapshot: DiscoverySnapshot, bootstrapProfileName: string): Promise<void> {
-  const baseProfileName = args.from ?? args.profile ?? bootstrapProfileName ?? "jarvis";
+  const baseProfileName = args.from ?? args.profile ?? (args.name ? "jarvis" : bootstrapProfileName ?? "jarvis");
   const profile = await resolveAnyProfile(baseProfileName);
   const profileSpec = await loadProfile(PATHS, profile.name);
   const targetProfileName = args.name
-    ? toLocalProfileName(args.name)
+    ? toProfileName(args.name)
     : profile.isLocal
       ? profile.name
-      : `local-${slugify(profile.name)}`;
+      : slugify(profile.name);
   const envBaseline = await resolveEnvBaseline(args, profile, profileSpec);
   const intent = args.profile ? "improve-profile" : "create-profile";
   const outDir = resolveUserPath(args.out ?? join(PATHS.runtimeHome, "forges", `${timestamp()}-${targetProfileName}`));
@@ -182,13 +186,50 @@ async function writeForgeBundle(args: ForgeArgs, snapshot: DiscoverySnapshot, bo
     readme: buildWorkbenchReadme(context),
   });
 
-  console.log(`gentlesmith forge bundle written to: ${outDir}`);
+  console.log(`gentlesmith forge draft written to: ${outDir}`);
   console.log("");
   console.log("Next:");
-  console.log(`  1. Give ${join(outDir, "handoff.md")} to your agent.`);
-  console.log(`  2. Let it create/refine ${targetProfileName} in ~/.gentlesmith.`);
-  console.log(`  3. Review with: gentlesmith export --profile ${targetProfileName}`);
-  console.log("  4. Apply only after review: gentlesmith sync --apply");
+  console.log(`  1. Open ${join(outDir, "handoff.md")} with your coding agent.`);
+  console.log(`  2. Let it create/refine profile: ${targetProfileName}`);
+  console.log(`  3. Review: gentlesmith export --profile ${targetProfileName}`);
+  console.log(`  4. Preview: gentlesmith apply ${targetProfileName.replace(/^local-/, "")}`);
+  console.log(`  5. Apply:  gentlesmith apply ${targetProfileName.replace(/^local-/, "")} --apply`);
+
+  if (args.openWith) {
+    openForgeHandoff(args.openWith, outDir, join(outDir, "handoff.md"));
+  }
+}
+
+function openForgeHandoff(openWith: string, bundleDir: string, handoffPath: string): void {
+  const target = openWith.toLowerCase();
+  const prompt = `Read this Gentlesmith handoff and help me create/refine the requested profile. Follow allowed writes only: ${handoffPath}`;
+
+  const launchers: Record<string, { command: string; args: string[]; label: string }> = {
+    editor: { command: "code", args: [bundleDir, handoffPath], label: "VS Code" },
+    code: { command: "code", args: [bundleDir, handoffPath], label: "VS Code" },
+    codex: { command: "codex", args: [prompt], label: "Codex" },
+    opencode: { command: "opencode", args: [process.cwd(), "--prompt", prompt], label: "OpenCode" },
+    claude: { command: "claude", args: ["--add-dir", PATHS.runtimeHome, prompt], label: "Claude" },
+    gemini: { command: "gemini", args: ["-i", prompt, "--include-directories", PATHS.runtimeHome], label: "Gemini" },
+  };
+
+  const launcher = launchers[target];
+  if (!launcher) {
+    console.log(`\nUnknown handoff target: ${openWith}`);
+    console.log("Use one of: editor, codex, opencode, claude, gemini.");
+    return;
+  }
+
+  if (spawnSync("which", [launcher.command], { stdio: "ignore" }).status !== 0) {
+    console.log(`\n${launcher.label} command not found. Open manually: ${handoffPath}`);
+    return;
+  }
+
+  console.log(`\nOpening handoff with ${launcher.label}...`);
+  const result = spawnSync(launcher.command, launcher.args, { stdio: "inherit" });
+  if (result.error || result.status !== 0) {
+    console.log(`\nCould not open ${launcher.label}. Open manually: ${handoffPath}`);
+  }
 }
 
 async function resolveAnyProfile(profileName: string): Promise<ForgeProfileChoice> {
@@ -406,9 +447,8 @@ async function findLocalEnvBaselineProfile(): Promise<{ profile: ForgeProfileCho
 }
 
 function envProfilePriority(name: string): number {
-  if (name === "local-diego" || name === "diego-local") return 0;
-  if (name.startsWith("local-")) return 1;
-  return 2;
+  if (name.startsWith("local-")) return 0;
+  return 1;
 }
 
 function envRefsFromProfile(spec: ProfileSpec): string[] {
@@ -598,10 +638,10 @@ async function selectProfile(): Promise<ProfileSelection> {
   if (picked === "__create") {
     const rawName = await input({
       message: "New profile name:",
-      default: "local-forged",
+      default: "forged",
       validate: (value) => toSlug(value).length > 0 || "Use at least one letter or number",
     });
-    const name = toLocalProfileName(rawName);
+    const name = toProfileName(rawName);
     const path = join(PATHS.localProfilesDir, `${name}.yaml`);
     const profile: ProfileDoc = existsSync(path)
       ? parseYAML(await readFile(path, "utf8")) as ProfileDoc
@@ -609,7 +649,7 @@ async function selectProfile(): Promise<ProfileSelection> {
     return { profileName: name, profilePath: path, profile };
   }
 
-  const profileName = picked.split("/").pop()!.replace(/\.yaml$/, "");
+  const profileName = basename(picked).replace(/\.yaml$/, "");
   const profile = parseYAML(await readFile(picked, "utf8")) as ProfileDoc;
   return { profileName, profilePath: picked, profile };
 }
@@ -670,10 +710,10 @@ function buildDeploymentFragment(deployment: string): string {
   ].join("\n");
 }
 
-function toLocalProfileName(value: string): string {
-  const slug = toSlug(value.replace(/^local-/, ""));
-  return `local-${slug}`;
+function toProfileName(value: string): string {
+  return toSlug(value.replace(/^local-/, ""));
 }
+
 
 function toSlug(value: string): string {
   return value
@@ -690,6 +730,17 @@ function readFlag(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
   if (idx < 0) return undefined;
   return args[idx + 1];
+}
+
+function readPositionalName(args: string[]): string | undefined {
+  const flagsWithValues = new Set(["--name", "--from", "--profile", "--out", "--env", "--env-from"]);
+  for (let idx = 0; idx < args.length; idx += 1) {
+    const arg = args[idx];
+    if (flagsWithValues.has(args[idx - 1])) continue;
+    if (arg.startsWith("--")) continue;
+    return arg;
+  }
+  return undefined;
 }
 
 function parseEnvMode(value: string | undefined): EnvMode {

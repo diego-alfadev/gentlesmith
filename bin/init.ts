@@ -79,8 +79,6 @@ async function ensureDefaultProfile(
   snapshot: DiscoverySnapshot,
 ): Promise<{ profileName: string; created: boolean }> {
   const locals = await listLocalProfiles(paths);
-  const diego = locals.find((profile) => profile.name === "diego-local" || profile.name === "local-diego");
-  if (diego) return { profileName: diego.name, created: false };
   if (locals.length > 0) return { profileName: locals[0].name, created: false };
 
   const profileName = "local-default";
@@ -119,9 +117,10 @@ async function ensureRecommendedTargets(
 
     if (current) {
       await saveInstalledTarget(paths, targetName, {
-        ...templateSpec,
+        ...current.spec,
+        sourceTemplate: current.spec.sourceTemplate ?? templateSpec.sourceTemplate ?? targetName,
         profile: current.spec.profile || profileName,
-        enabled: current.spec.enabled ?? templateSpec.enabled,
+        enabled: current.spec.enabled ?? templateSpec.enabled ?? true,
       });
       continue;
     }

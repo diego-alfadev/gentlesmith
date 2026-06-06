@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -74,6 +74,42 @@ export async function discoverRuntime(paths: RuntimePaths): Promise<DiscoverySna
   const skills = await discoverSkills();
   const recommendations = buildRecommendations(paths, tools, agents, skills);
   return { tools, agents, skills, recommendations };
+}
+
+
+export async function writeDiscoverySnapshot(paths: RuntimePaths, snapshot: DiscoverySnapshot): Promise<void> {
+  await mkdir(paths.discoveryDir, { recursive: true });
+  await writeFile(join(paths.discoveryDir, "snapshot.json"), JSON.stringify(snapshot, null, 2) + "\n", "utf8");
+  await writeFile(join(paths.discoveryDir, "tools.json"), JSON.stringify(snapshot.tools, null, 2) + "\n", "utf8");
+  await writeFile(join(paths.discoveryDir, "agents.json"), JSON.stringify(snapshot.agents, null, 2) + "\n", "utf8");
+  await writeFile(join(paths.discoveryDir, "skills.json"), JSON.stringify(snapshot.skills, null, 2) + "\n", "utf8");
+  await writeFile(join(paths.discoveryDir, "snapshot.md"), renderDiscoveryMarkdown(snapshot), "utf8");
+}
+
+function renderDiscoveryMarkdown(snapshot: DiscoverySnapshot): string {
+  const lines = ["# Gentlesmith Discovery Snapshot", "", ...summarizeDiscovery(snapshot).map((line) => `- ${line}`), ""];
+  lines.push("## Tools", "");
+  for (const [name, hit] of Object.entries(snapshot.tools)) {
+    lines.push(`- ${name}: ${hit.detected ? "detected" : "not detected"}${hit.version ? ` (${hit.version})` : ""}${hit.path ? ` — ${hit.path}` : ""}`);
+  }
+  lines.push("", "## Agents", "");
+  for (const [name, hit] of Object.entries(snapshot.agents)) {
+    lines.push(`- ${name}: ${hit.detected ? "detected" : "not detected"}${hit.configPath ? ` — ${hit.configPath}` : ""}`);
+  }
+  lines.push("", "## Skills", "");
+  if (snapshot.skills.length === 0) lines.push("- none detected");
+  for (const skill of snapshot.skills) lines.push(`- ${skill.name} (${skill.source}) — ${skill.path}`);
+  lines.push("", "## Recommendations", "", "### Fragments", "");
+  for (const ref of snapshot.recommendations.fragments) lines.push(`- ${ref}`);
+  if (snapshot.recommendations.fragments.length === 0) lines.push("- none");
+  lines.push("", "### Targets", "");
+  for (const target of snapshot.recommendations.targets) lines.push(`- ${target}`);
+  if (snapshot.recommendations.targets.length === 0) lines.push("- none");
+  lines.push("", "### Warnings", "");
+  for (const warning of snapshot.recommendations.warnings) lines.push(`- ${warning}`);
+  if (snapshot.recommendations.warnings.length === 0) lines.push("- none");
+  lines.push("");
+  return lines.join("\n");
 }
 
 export function summarizeDiscovery(snapshot: DiscoverySnapshot): string[] {

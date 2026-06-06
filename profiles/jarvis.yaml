@@ -1,4 +1,5 @@
 name: jarvis
+kind: developer
 description: Developer baseline — Jarvis-inspired persona + technical judgment rules. No machine-specific env or tool preferences.
 include:
   - persona/jarvis

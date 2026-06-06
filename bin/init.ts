@@ -23,7 +23,7 @@ import {
   writeRuntimeFile,
   type RuntimePaths,
 } from "./runtime";
-import { discoverRuntime, summarizeDiscovery, type DiscoverySnapshot } from "./discovery";
+import { discoverRuntime, summarizeDiscovery, writeDiscoverySnapshot, type DiscoverySnapshot } from "./discovery";
 
 const PATHS = resolveRuntimePaths();
 
@@ -37,6 +37,7 @@ export interface BootstrapResult {
 export async function bootstrapRuntime(paths: RuntimePaths = PATHS): Promise<BootstrapResult> {
   await ensureRuntimeState(paths);
   const snapshot = await discoverRuntime(paths);
+  await writeDiscoverySnapshot(paths, snapshot);
   const { profileName, created } = await ensureDefaultProfile(paths, snapshot);
   const installedTargets = await ensureRecommendedTargets(paths, snapshot, profileName);
 

@@ -1,0 +1,5 @@
+schemaVersion: 1
+name: dangling-requires-profile
+artifacts:
+  - ref: artifacts/rules/safety.md
+    exposure: embed

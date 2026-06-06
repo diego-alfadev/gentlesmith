@@ -1,0 +1,5 @@
+schemaVersion: 1
+name: private-profile
+artifacts:
+  - ref: artifacts/context/local-toolchain.md
+    exposure: embed

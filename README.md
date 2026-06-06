@@ -116,6 +116,7 @@ Advanced:
 |---|---|
 | `gentlesmith patch` | Create a profile patch bundle from a skill/idea/markdown |
 | `gentlesmith sync [--apply]` | Render current low-level target bindings |
+| `gentlesmith v1 ...` | Experimental Profile v1 assimilate/inspect/render tools |
 | `gentlesmith init` | Deterministic runtime bootstrap only |
 | `gentlesmith target ...` | Manage installed target definitions |
 | `gentlesmith preset ...` | Apply fragment bundles |
@@ -162,6 +163,28 @@ gentlesmith builds an internal `DiscoverySnapshot` under the hood. It detects:
 
 Discovery drives recommended fragments, targets, and skill references. There is no separate public `gentlesmith gentle` namespace.
 
+## Profile v1 experimental foundation
+
+Profile v1 is the portable profile foundation:
+
+```text
+gentlesmith.profile.yaml -> artifacts/*.md -> ResourceGraph -> target adapters
+```
+
+It keeps artifacts neutral and moves target-specific behavior into adapters/overrides.
+
+Try the current experimental commands:
+
+```bash
+gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
+gentlesmith v1 inspect --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith v1 render --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --target codex
+```
+
+You can also launch this from `gentlesmith browse` → “Modularize AGENTS.md into Profile v1 draft”.
+
+See `PROFILE_V1.md` for the manifest, artifact frontmatter, privacy, exposure, and adapter model.
+
 ## gentle-ai bridge status
 
 Gentlesmith is bridge-ready, not bridge-dependent.
@@ -186,11 +209,10 @@ For a short teammate/maintainer walkthrough, see `DEMO.md`.
 
 ## Forge
 
-Default `forge` is LLM-first.
+Default `forge` is guided and LLM-first. It starts with a short intent interview, then prepares a self-contained Workbench bundle with:
 
-It does not invent its own model runtime. Instead it prepares a self-contained Workbench bundle with:
-
-- current profile
+- profile kind (`developer`, `domain`, `blank`, or `subagent`)
+- selected base/preset/fragments
 - detected tools and agents
 - recommended integration fragments
 - reusable env baseline when available
@@ -201,12 +223,25 @@ It does not invent its own model runtime. Instead it prepares a self-contained W
 Examples:
 
 ```bash
-gentlesmith forge debugger                 # default base, no internal names required
-gentlesmith forge --profile yourname        # improve an existing profile
-gentlesmith forge reviewer --env-from yourname
-gentlesmith forge --name mastra-worker --from surgical --env agnostic
-gentlesmith forge trading --open-with codex  # optional: launch handoff directly
+gentlesmith forge debugger                  # guided interview (default)
+gentlesmith forge --from-agents AGENTS.md     # modularize an existing agent bible
+gentlesmith forge trader --blank            # purist blank canvas
+gentlesmith forge reviewer --custom         # preset first, fragments after
+gentlesmith forge mastra-worker --quick --kind subagent
+gentlesmith forge trading --open-with codex # optional: launch handoff directly
 ```
+
+
+Forge modes:
+
+| Mode | Command | Use when |
+|---|---|---|
+| Guided | `gentlesmith forge trader` | You want Gentlesmith to clarify kind/env/skills before composing. |
+| Blank | `gentlesmith forge trader --blank` | You want a clean canvas and agent-led fragment construction. |
+| Custom | `gentlesmith forge trader --custom` | You want to choose base preset and toggle fragments. |
+| Quick | `gentlesmith forge trader --quick` | You want a non-interactive draft for scripts/power users. |
+
+Discovery snapshots are cached under `~/.gentlesmith/discovery/` (`snapshot.md`, `tools.json`, `agents.json`, `skills.json`). Forge bundles include them as context; env/toolchain/skills stay reviewable unless selected by the mode/interview.
 
 Env behavior:
 

@@ -1,0 +1,5 @@
+schemaVersion: 1
+name: missing-ref-profile
+artifacts:
+  - ref: artifacts/rules/missing.md
+    exposure: embed

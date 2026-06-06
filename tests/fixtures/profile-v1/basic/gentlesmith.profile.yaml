@@ -1,0 +1,18 @@
+schemaVersion: 1
+name: jarvis-portable
+description: Portable Jarvis profile for coding agents.
+artifacts:
+  - ref: artifacts/rules/safety.md
+    exposure: embed
+    overrides:
+      markdown-managed-block:
+        title: Operating Safety
+  - ref: artifacts/workflows/coolify-deploy.md
+    exposure: embed
+  - ref: artifacts/skills/coolify-manager.md
+    exposure: mention
+  - ref: artifacts/capabilities/context7.md
+    exposure: none
+targets:
+  codex:
+    adapter: markdown-managed-block

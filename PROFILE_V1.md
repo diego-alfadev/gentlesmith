@@ -1,0 +1,186 @@
+# Gentlesmith Profile v1
+
+Profile v1 is the portable profile foundation for Gentlesmith.
+
+It is experimental, intentionally small, and designed around this rule:
+
+> Keep the portable source neutral; put target-specific behavior in adapters or overrides.
+
+## Mental model
+
+```text
+gentlesmith.profile.yaml
+  -> references artifacts
+artifacts/*.md
+  -> neutral frontmatter + markdown body
+ResourceGraph
+  -> derived internal validation/rendering graph
+target adapters
+  -> Codex / Claude / OpenCode / Pi-specific output
+```
+
+Users author the manifest and artifacts. Gentlesmith derives the graph. Artifact refs must stay inside the profile directory; absolute paths and `..` traversal are rejected.
+
+## Manifest
+
+```yaml
+schemaVersion: 1
+name: jarvis-portable
+description: Portable Jarvis profile for coding agents.
+artifacts:
+  - ref: artifacts/rules/safety.md
+    exposure: embed
+  - ref: artifacts/skills/coolify-manager.md
+    exposure: mention
+targets:
+  codex:
+    adapter: markdown-managed-block
+```
+
+## Artifact frontmatter
+
+Required:
+
+```yaml
+name: safety
+type: rule
+description: Safety and reversible-action rules.
+```
+
+Optional:
+
+```yaml
+tags: [safety, workflow]
+requires:
+  skills:
+    - coolify-manager
+  capabilities:
+    - shell
+  artifacts:
+    - deployment-checklist
+privacy: public
+```
+
+Supported artifact types:
+
+- `rule`
+- `workflow`
+- `prompt`
+- `context`
+- `skill-ref`
+- `capability-ref`
+
+## Exposure
+
+Profile references decide how an artifact is rendered:
+
+| Exposure | Meaning |
+|---|---|
+| `embed` | Include the artifact body directly in target output. |
+| `mention` | Render a compact reference/hint. Useful for skills. |
+| `none` | Track in the graph but do not render directly. |
+
+## Privacy
+
+| Privacy | Meaning |
+|---|---|
+| `public` | Safe to export/share. |
+| `private` | User-specific but usable locally. |
+| `local` | Machine/environment-specific and non-portable. |
+
+Public exports must surface `private` and `local` artifacts before packaging.
+
+## Target-specific optimization
+
+Do not put target-specific fields in portable artifact frontmatter:
+
+```yaml
+allowed-tools: Bash # Claude-specific: do not put this in core artifact metadata
+model: claude-sonnet # target-specific
+agent: build # target-specific
+```
+
+Use manifest/adaptor overrides instead:
+
+```yaml
+artifacts:
+  - ref: artifacts/rules/safety.md
+    exposure: embed
+    overrides:
+      markdown-managed-block:
+        title: Operating Safety
+```
+
+## Experimental commands
+
+Render a v1 profile through the current Markdown adapter:
+
+```bash
+gentlesmith v1 render \
+  --profile tests/fixtures/profile-v1/basic/gentlesmith.profile.yaml \
+  --target codex
+```
+
+Inspect the derived graph and portability report:
+
+```bash
+gentlesmith v1 inspect \
+  --profile tests/fixtures/profile-v1/basic/gentlesmith.profile.yaml
+
+gentlesmith v1 inspect \
+  --profile tests/fixtures/profile-v1/basic/gentlesmith.profile.yaml \
+  --json
+```
+
+Preview cataloging an existing `AGENTS.md`:
+
+```bash
+gentlesmith v1 catalog-agents --source AGENTS.md --json
+```
+
+Assimilate an existing `AGENTS.md` into a reviewable profile bundle directly:
+
+```bash
+gentlesmith v1 assimilate \
+  --source AGENTS.md \
+  --out .gentlesmith-v1-draft \
+  --name jarvis-draft
+```
+
+The primary product entry point is `forge --from-agents`, backed by the `modularizeAgentsProfile` application use case so CLI, Browse, and future UI layers share the same behavior:
+
+```bash
+gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
+```
+
+`assimilate` and `forge --from-agents` write `gentlesmith.profile.yaml` plus `artifacts/**.md`. Imported sections are marked `privacy: private` by default because existing agent files often contain personal or machine-specific behavior. It refuses to overwrite existing profile files; use a fresh output directory when iterating. Add `--dry-run` to preview without writing. The same flow is available in `gentlesmith browse` as “Modularize AGENTS.md into Profile v1 draft”.
+
+This is the proof test for Profile v1: an existing agent bible should become named portable pieces without losing intent. Top-level preamble before the first `##` is preserved as a `context:preamble` artifact.
+
+## Current status
+
+Implemented and tested:
+
+- neutral manifest parsing
+- artifact frontmatter parsing
+- target-specific frontmatter warnings
+- workflow procedural validation
+- ResourceGraph derivation
+- duplicate identity detection
+- dangling `requires.artifacts` validation
+- privacy/portability checks
+- profile graph inspection
+- markdown managed-block rendering
+- AGENTS.md cataloging
+- AGENTS.md assimilation into a reviewable profile bundle
+- experimental `gentlesmith v1 render`
+- experimental `gentlesmith v1 inspect`
+- experimental `gentlesmith v1 catalog-agents`
+- experimental `gentlesmith v1 assimilate`
+- product-facing `gentlesmith forge --from-agents` and Browse entry point
+
+Not yet wired as the default:
+
+- `gentlesmith sync`
+- `gentlesmith export`
+- richer Claude/OpenCode/Pi adapters

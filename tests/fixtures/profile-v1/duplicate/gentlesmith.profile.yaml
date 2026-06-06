@@ -1,0 +1,7 @@
+schemaVersion: 1
+name: duplicate-profile
+artifacts:
+  - ref: artifacts/rules/safety-a.md
+    exposure: embed
+  - ref: artifacts/rules/safety-b.md
+    exposure: embed

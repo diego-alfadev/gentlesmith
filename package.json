@@ -8,8 +8,10 @@
   },
   "files": [
     "bin/",
+    "src/",
     "fragments/",
     "presets/",
+    "profiles/blank.yaml",
     "profiles/jarvis.yaml",
     "profiles/surgical.yaml",
     "targets/agents.yaml",
@@ -19,6 +21,7 @@
     "targets/cursor.yaml",
     "targets/opencode.yaml",
     "README.md",
+    "PROFILE_V1.md",
     "SETUP.md",
     "DEMO.md",
     "GENTLE_AI_CONTRACT.md",
@@ -28,6 +31,7 @@
   "scripts": {
     "distribute": "bun run bin/distribute.ts",
     "pack:check": "bun pm pack --dry-run",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

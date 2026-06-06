@@ -752,11 +752,23 @@ async function forgeProfile() {
     default: "debugger",
     validate: (value) => value.trim().length > 0 || "Use a short profile name",
   });
+  const mode = await select({
+    message: "Forge mode:",
+    choices: [
+      { name: "Guided interview (recommended)", value: "guided" },
+      { name: "Blank canvas", value: "blank" },
+      { name: "Custom fragments", value: "custom" },
+      { name: "Quick draft", value: "quick" },
+    ],
+  });
   const openWith = await select({
     message: "Open the handoff now?",
     choices: handoffChoices(),
   });
   const args = ["forge", profileName.trim()];
+  if (mode === "blank") args.push("--blank");
+  if (mode === "custom") args.push("--custom");
+  if (mode === "quick") args.push("--quick");
   if (openWith !== "none") args.push("--open-with", openWith);
   runGentlesmith(args);
   console.log("");
@@ -772,6 +784,37 @@ function handoffChoices() {
     { name: "Open with Claude", value: "claude" },
     { name: "Open with Gemini", value: "gemini" },
   ];
+}
+
+async function modularizeAgentsProfile() {
+  banner("Modularize AGENTS.md");
+  const source = await input({
+    message: "AGENTS.md path:",
+    default: "AGENTS.md",
+    validate: (value) => value.trim().length > 0 || "Provide an AGENTS.md path",
+  });
+  const profileName = await input({
+    message: "Draft profile name:",
+    default: "jarvis-draft",
+    validate: (value) => /^[a-zA-Z0-9][a-zA-Z0-9-_ ]*$/.test(value.trim()) || "Use a short profile name",
+  });
+  const outDir = await input({
+    message: "Draft output directory:",
+    default: `.gentlesmith-v1-draft-${profileName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`,
+    validate: (value) => value.trim().length > 0 || "Provide an output directory",
+  });
+
+  runGentlesmith([
+    "forge",
+    "--from-agents",
+    source.trim(),
+    "--name",
+    profileName.trim(),
+    "--out",
+    outDir.trim(),
+  ]);
+  console.log("");
+  await pause();
 }
 
 async function improveProfile() {
@@ -883,7 +926,8 @@ export async function runBrowse(): Promise<void> {
         message: "What do you want to do?",
         choices: [
           new Separator(c.dim("── workbench ──")),
-          { name: `${c.green("Create")} profile`, value: "forge" },
+          { name: `${c.green("Create")} profile (guided / blank / custom)`, value: "forge" },
+          { name: `${c.green("Modularize")} AGENTS.md into Profile v1 draft`, value: "modularize-agents" },
           { name: `${c.green("Improve")} profile`, value: "improve" },
           { name: `${c.green("Apply")} profile switch`, value: "apply-profile" },
           { name: `${c.green("Review")} export/profile`, value: "export-profile" },
@@ -916,6 +960,7 @@ export async function runBrowse(): Promise<void> {
       switch (action) {
         case "fragments": await showFragments(); break;
         case "forge": await forgeProfile(); break;
+        case "modularize-agents": await modularizeAgentsProfile(); break;
         case "improve": await improveProfile(); break;
         case "apply-profile": await applyProfile(); break;
         case "export-profile": await exportProfile(); break;

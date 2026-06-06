@@ -30,7 +30,7 @@ Development from a local checkout remains available with `bun link`, but the pac
 gentlesmith forge debugger
 ```
 
-`forge` bootstraps `~/.gentlesmith` if needed and writes a reviewable handoff bundle under `~/.gentlesmith/forges/`. Give its `handoff.md` to your coding agent; it will propose/write local profile files under `~/.gentlesmith`.
+`forge` bootstraps `~/.gentlesmith` if needed, runs a short guided interview, caches discovery under `~/.gentlesmith/discovery/`, and writes a reviewable handoff bundle under `~/.gentlesmith/forges/`. Give its `handoff.md` to your coding agent; it will propose/write local profile files under `~/.gentlesmith`. Use `--blank`, `--custom`, or `--quick` when you want less guidance or more control.
 
 ## Step 3 — Review, preview, apply
 

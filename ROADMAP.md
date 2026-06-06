@@ -59,6 +59,23 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 - [ ] Verify gentle-ai public plugin/bridge contract before implementing transport.
 - [ ] Decide whether OpenCode profile registration should eventually be delegated to gentle-ai.
 
+## P6 — Profile v1 foundation
+
+- [x] Define neutral `gentlesmith.profile.yaml` v1 manifest contract.
+- [x] Define external Markdown artifacts with minimal frontmatter.
+- [x] Derive internal `ResourceGraph` from manifest + artifacts.
+- [x] Add privacy/portability checks for `public`, `private`, and `local`.
+- [x] Add `embed`, `mention`, and `none` exposure semantics.
+- [x] Add experimental Markdown managed-block adapter.
+- [x] Add AGENTS.md cataloging as a proof test for modular profile assimilation.
+- [x] Add AGENTS.md assimilation into a reviewable profile bundle.
+- [x] Add experimental `gentlesmith v1 render`, `gentlesmith v1 inspect`, `gentlesmith v1 catalog-agents`, and `gentlesmith v1 assimilate`.
+- [x] Add product-facing `gentlesmith forge --from-agents` and Browse entry point for modularizing existing AGENTS.md files.
+- [x] Extract AGENTS.md modularization into a UI-ready application use case under `src/application`.
+- [ ] Wire Profile v1 into `sync` after surrounding WIP is reviewed.
+- [ ] Wire Profile v1 privacy checks into `export`.
+- [ ] Add richer Claude/OpenCode/Pi adapters.
+
 ## Later — Profile evaluation
 
 - [x] Add `gentlesmith patch` CLI bundle flow for adapting installed skills or free-form ideas into profile fragments.

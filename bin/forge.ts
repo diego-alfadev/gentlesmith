@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { confirm, input, select } from "@inquirer/prompts";
+import { checkbox, confirm, input, select } from "@inquirer/prompts";
 import type { ExitPromptError as ExitPromptErrorType } from "@inquirer/core";
 import { parse as parseYAML, stringify as stringifyYAML } from "yaml";
 import {
@@ -18,7 +18,7 @@ import {
   type ProfileSpec,
 } from "./runtime";
 import { bootstrapRuntime } from "./init";
-import { discoverRuntime, summarizeDiscovery, type DiscoverySnapshot } from "./discovery";
+import { discoverRuntime, summarizeDiscovery, writeDiscoverySnapshot, type DiscoverySnapshot } from "./discovery";
 import {
   buildForgeHandoff,
   buildProfileWorkbenchContext,
@@ -28,6 +28,7 @@ import {
   writeProfileWorkbenchBundle,
   type WorkbenchSourceMaterial,
 } from "./workbench";
+import { modularizeAgentsProfile } from "../src/application/modularize-agents";
 
 const PATHS = resolveRuntimePaths();
 
@@ -61,6 +62,26 @@ interface ForgeArgs {
   envFrom?: string;
   manual: boolean;
   openWith?: string;
+  quick: boolean;
+  blank: boolean;
+  custom: boolean;
+  kind?: ProfileKind;
+  fromAgents?: string;
+  target?: string;
+  dryRun: boolean;
+}
+
+type ProfileKind = "developer" | "domain" | "blank" | "subagent";
+type ForgeMode = "guided" | "quick" | "blank" | "custom" | "improve";
+
+interface ForgeInterview {
+  mode: ForgeMode;
+  kind: ProfileKind;
+  baseProfileName: string;
+  includeEnv: boolean;
+  selectedFragments?: string[];
+  selectedSkills: string[];
+  notes: string;
 }
 
 interface ForgeProfileChoice {
@@ -89,15 +110,29 @@ function parseForgeArgs(args: string[]): ForgeArgs {
     env: parseEnvMode(readFlag(args, "--env")),
     envFrom: readFlag(args, "--env-from"),
     openWith: readFlag(args, "--open-with") ?? (args.includes("--open") ? "editor" : undefined),
+    quick: args.includes("--quick") || args.includes("--yes"),
+    blank: args.includes("--blank"),
+    custom: args.includes("--custom"),
+    kind: parseProfileKind(readFlag(args, "--kind")),
+    fromAgents: readFlag(args, "--from-agents") ?? readFlag(args, "--from-agents-md"),
+    target: readFlag(args, "--target"),
+    dryRun: args.includes("--dry-run"),
     manual: args.includes("--manual") || args.includes("--local"),
   };
 }
 
 export async function runForge(args = process.argv.slice(3)): Promise<void> {
+  const parsed = parseForgeArgs(args);
+
+  if (parsed.fromAgents) {
+    await writeAgentsProfileDraft(parsed);
+    return;
+  }
+
   await ensureRuntimeState(PATHS);
   const bootstrap = await bootstrapRuntime(PATHS);
   const snapshot = bootstrap.snapshot ?? await discoverRuntime(PATHS);
-  const parsed = parseForgeArgs(args);
+  await writeDiscoverySnapshot(PATHS, snapshot);
 
   if (!parsed.manual) {
     await writeForgeBundle(parsed, snapshot, bootstrap.profileName);
@@ -155,18 +190,23 @@ export async function runForge(args = process.argv.slice(3)): Promise<void> {
 }
 
 async function writeForgeBundle(args: ForgeArgs, snapshot: DiscoverySnapshot, bootstrapProfileName: string): Promise<void> {
-  const baseProfileName = args.from ?? args.profile ?? (args.name ? "jarvis" : bootstrapProfileName ?? "jarvis");
-  const profile = await resolveAnyProfile(baseProfileName);
-  const profileSpec = await loadProfile(PATHS, profile.name);
+  const interview = await resolveForgeInterview(args, snapshot, bootstrapProfileName);
+  const profile = await resolveAnyProfile(interview.baseProfileName);
+  const loadedProfileSpec = await loadProfile(PATHS, profile.name);
+  const profileSpec = interview.selectedFragments
+    ? { ...loadedProfileSpec, kind: interview.kind, include: interview.selectedFragments }
+    : { ...loadedProfileSpec, kind: loadedProfileSpec.kind ?? interview.kind };
   const targetProfileName = args.name
     ? toProfileName(args.name)
     : profile.isLocal
       ? profile.name
       : slugify(profile.name);
-  const envBaseline = await resolveEnvBaseline(args, profile, profileSpec);
+  const envBaseline = interview.includeEnv
+    ? await resolveEnvBaseline(args, profile, profileSpec)
+    : buildEnvAgnosticBaseline(interview);
   const intent = args.profile ? "improve-profile" : "create-profile";
   const outDir = resolveUserPath(args.out ?? join(PATHS.runtimeHome, "forges", `${timestamp()}-${targetProfileName}`));
-  const sources = buildForgeSources(profile, profileSpec, snapshot, targetProfileName, envBaseline);
+  const sources = buildForgeSources(profile, profileSpec, snapshot, targetProfileName, envBaseline, interview);
   const context = buildProfileWorkbenchContext({
     paths: PATHS,
     outDir,
@@ -198,6 +238,37 @@ async function writeForgeBundle(args: ForgeArgs, snapshot: DiscoverySnapshot, bo
   if (args.openWith) {
     openForgeHandoff(args.openWith, outDir, join(outDir, "handoff.md"));
   }
+}
+
+async function writeAgentsProfileDraft(args: ForgeArgs): Promise<void> {
+  if (!args.fromAgents) throw new Error("Missing --from-agents path.");
+  const profileName = args.name ? requireProfileNameSlug(toProfileName(args.name), "--name") : undefined;
+  const outDir = resolveUserPath(args.out ?? `.gentlesmith-v1-draft${profileName ? `-${profileName}` : ""}`);
+  const result = await modularizeAgentsProfile({
+    sourcePath: resolveUserPath(args.fromAgents),
+    outDir,
+    profileName,
+    targetName: args.target,
+    dryRun: args.dryRun,
+  });
+
+  console.log(result.wroteFiles ? "gentlesmith forge draft written" : "gentlesmith forge assimilation preview");
+  console.log(`Profile: ${result.profileName}`);
+  console.log(`Draft:   ${result.outDir}`);
+  console.log(`Source:  ${result.sourcePath}`);
+  console.log("");
+  console.log("Artifacts:");
+  for (const artifact of result.artifacts) {
+    console.log(`  + ${artifact.type.padEnd(14)} ${artifact.name} -> ${artifact.ref}`);
+  }
+  if (result.warnings.length > 0) {
+    console.log("\nWarnings:");
+    for (const warning of result.warnings) console.log(`  ! ${warning}`);
+  }
+  console.log("\nNext:");
+  console.log(`  1. Inspect: ${result.nextCommands.inspect}`);
+  console.log(`  2. Render:  ${result.nextCommands.render}`);
+  console.log("  3. Review/edit the artifact files before exporting or applying anywhere.");
 }
 
 function openForgeHandoff(openWith: string, bundleDir: string, handoffPath: string): void {
@@ -232,6 +303,202 @@ function openForgeHandoff(openWith: string, bundleDir: string, handoffPath: stri
   }
 }
 
+async function resolveForgeInterview(
+  args: ForgeArgs,
+  snapshot: DiscoverySnapshot,
+  bootstrapProfileName: string,
+): Promise<ForgeInterview> {
+  if (args.profile) {
+    const current = await loadProfile(PATHS, args.profile);
+    return {
+      mode: "improve",
+      kind: args.kind ?? current.kind ?? "developer",
+      baseProfileName: args.profile,
+      includeEnv: args.env !== "agnostic",
+      selectedSkills: [],
+      notes: "Improve existing profile without changing its base unless the user asks.",
+    };
+  }
+
+  if (args.quick) {
+    const kind = args.kind ?? (args.blank ? "blank" : "developer");
+    return {
+      mode: args.blank ? "blank" : "quick",
+      kind,
+      baseProfileName: args.from ?? baseForKind(kind, bootstrapProfileName),
+      includeEnv: args.env !== "agnostic" && kind === "developer" && !args.blank,
+      selectedSkills: relevantSkillNames(snapshot, args.name),
+      notes: "Quick mode: prepare a bundle without an interactive interview.",
+    };
+  }
+
+  if (args.blank) {
+    return {
+      mode: "blank",
+      kind: args.kind ?? "blank",
+      baseProfileName: args.from ?? "blank",
+      includeEnv: false,
+      selectedSkills: [],
+      notes: "Blank canvas mode: do not include persona/rules/env unless the user or receiving agent explicitly adds them.",
+    };
+  }
+
+  if (args.custom) return promptCustomInterview(args, snapshot, bootstrapProfileName);
+
+  return promptGuidedInterview(args, snapshot, bootstrapProfileName);
+}
+
+async function promptGuidedInterview(
+  args: ForgeArgs,
+  snapshot: DiscoverySnapshot,
+  bootstrapProfileName: string,
+): Promise<ForgeInterview> {
+  const guessedKind = guessKind(args.name);
+  const kind = args.kind ?? await select<ProfileKind>({
+    message: "What kind of profile is this?",
+    default: guessedKind,
+    choices: [
+      { name: "Developer profile — coding agent behavior", value: "developer" },
+      { name: "Domain specialist — trading, writing, research, etc.", value: "domain" },
+      { name: "Blank canvas — minimal/purist", value: "blank" },
+      { name: "Subagent / framework agent — portable role", value: "subagent" },
+    ],
+  });
+  const baseProfileName = args.from ?? baseForKind(kind, bootstrapProfileName);
+  const includeEnv = kind === "developer"
+    ? await confirm({ message: "Include local env/toolchain as selected context?", default: true })
+    : await confirm({ message: "Keep this profile portable/env-agnostic?", default: true }).then((portable) => !portable);
+  const selectedSkills = await promptSkills(snapshot, args.name);
+  const notes = await input({
+    message: "What should this profile be good at?",
+    default: defaultNotesForKind(kind, args.name),
+  });
+  return { mode: "guided", kind, baseProfileName, includeEnv, selectedSkills, notes };
+}
+
+async function promptCustomInterview(
+  args: ForgeArgs,
+  snapshot: DiscoverySnapshot,
+  bootstrapProfileName: string,
+): Promise<ForgeInterview> {
+  const kind = args.kind ?? await select<ProfileKind>({
+    message: "Profile kind:",
+    choices: [
+      { name: "Developer", value: "developer" },
+      { name: "Domain specialist", value: "domain" },
+      { name: "Blank canvas", value: "blank" },
+      { name: "Subagent / framework agent", value: "subagent" },
+    ],
+  });
+  const builtIns = await listBuiltInProfiles(PATHS);
+  const locals = await listLocalProfiles(PATHS);
+  const baseProfileName = args.from ?? await select<string>({
+    message: "Base preset/profile:",
+    choices: [
+      ...builtIns.map((profile) => ({ name: `${profile.name} (bundled)`, value: profile.name })),
+      ...locals.map((profile) => ({ name: `${profile.name} (local)`, value: profile.name })),
+    ],
+    default: baseForKind(kind, bootstrapProfileName),
+  });
+  const baseSpec = await loadProfile(PATHS, baseProfileName);
+  const recommended = new Set([...baseSpec.include, ...snapshot.recommendations.fragments]);
+  const available = await listAvailableFragments();
+  const selectedFragments = await checkbox<string>({
+    message: "Fragments to include:",
+    choices: available.map((ref) => ({ name: ref, value: ref, checked: recommended.has(ref) })),
+    required: false,
+  });
+  const includeEnv = selectedFragments.some((ref) => ref.startsWith("env/"));
+  const selectedSkills = await promptSkills(snapshot, args.name);
+  const notes = await input({ message: "Custom notes for the receiving agent:", default: defaultNotesForKind(kind, args.name) });
+  return { mode: "custom", kind, baseProfileName, includeEnv, selectedFragments, selectedSkills, notes };
+}
+
+async function promptSkills(snapshot: DiscoverySnapshot, profileName?: string): Promise<string[]> {
+  const choices = relevantSkills(snapshot, profileName).map((skill) => ({
+    name: `${skill.name} (${skill.source})`,
+    value: skill.name,
+    checked: isSkillRelevant(skill.name, profileName),
+  }));
+  if (choices.length === 0) return [];
+  return checkbox<string>({
+    message: "Skills to consider as references/adaptations:",
+    choices,
+    required: false,
+  });
+}
+
+function relevantSkills(snapshot: DiscoverySnapshot, profileName?: string): typeof snapshot.skills {
+  const sorted = [...snapshot.skills].sort((a, b) => Number(isSkillRelevant(b.name, profileName)) - Number(isSkillRelevant(a.name, profileName)) || a.name.localeCompare(b.name));
+  return sorted.slice(0, 20);
+}
+
+function relevantSkillNames(snapshot: DiscoverySnapshot, profileName?: string): string[] {
+  return relevantSkills(snapshot, profileName).filter((skill) => isSkillRelevant(skill.name, profileName)).map((skill) => skill.name);
+}
+
+function isSkillRelevant(skillName: string, profileName?: string): boolean {
+  if (!profileName) return false;
+  const words = toSlug(profileName).split("-").filter(Boolean);
+  const skill = toSlug(skillName);
+  return words.some((word) => skill.includes(word) || word.includes(skill));
+}
+
+async function listAvailableFragments(): Promise<string[]> {
+  const refs = new Set<string>();
+  await collectFragmentRefs(PATHS.builtInFragmentsDir, "", refs);
+  await collectFragmentRefs(PATHS.localFragmentsDir, "", refs);
+  return Array.from(refs).sort();
+}
+
+async function collectFragmentRefs(root: string, prefix: string, refs: Set<string>): Promise<void> {
+  if (!existsSync(root)) return;
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) await collectFragmentRefs(path, rel, refs);
+    if (entry.isFile() && entry.name.endsWith(".md")) refs.add(rel.replace(/\.md$/, ""));
+  }
+}
+
+function baseForKind(kind: ProfileKind, bootstrapProfileName: string): string {
+  if (kind === "developer") return "jarvis";
+  if (kind === "blank" || kind === "domain" || kind === "subagent") return "blank";
+  return bootstrapProfileName || "jarvis";
+}
+
+function guessKind(name?: string): ProfileKind {
+  const slug = toSlug(name ?? "");
+  if (!slug) return "developer";
+  if (["debug", "debugger", "review", "reviewer", "frontend", "backend", "architect", "coder", "developer"].some((word) => slug.includes(word))) return "developer";
+  if (["worker", "subagent", "mastra", "agent"].some((word) => slug.includes(word))) return "subagent";
+  return "domain";
+}
+
+function defaultNotesForKind(kind: ProfileKind, name?: string): string {
+  if (kind === "developer") return `Developer assistant for ${name ?? "coding work"}; keep it practical and compact.`;
+  if (kind === "domain") return `Domain specialist for ${name ?? "the requested domain"}; avoid developer boilerplate unless explicitly useful.`;
+  if (kind === "subagent") return `Portable subagent role for ${name ?? "a framework/orchestrator"}; avoid local machine assumptions.`;
+  return "Blank canvas; ask focused questions before adding durable behavior.";
+}
+
+function buildEnvAgnosticBaseline(interview: ForgeInterview): EnvBaseline {
+  return {
+    mode: "agnostic",
+    refs: [],
+    content: [
+      "# Env Policy",
+      "",
+      `Mode: ${interview.includeEnv ? "reviewable" : "agnostic"}.`,
+      "",
+      "Do not include local `env/*` fragments unless explicitly selected or confirmed by the user.",
+      "Use discovery snapshots as context, not as automatic profile content.",
+      "",
+    ].join("\n"),
+  };
+}
+
 async function resolveAnyProfile(profileName: string): Promise<ForgeProfileChoice> {
   const profiles = [
     ...(await listLocalProfiles(PATHS)).map((profile) => ({ ...profile, isLocal: true })),
@@ -252,8 +519,10 @@ function buildForgeSources(
   snapshot: DiscoverySnapshot,
   targetProfileName: string,
   envBaseline: EnvBaseline,
+  interview: ForgeInterview,
 ): WorkbenchSourceMaterial[] {
   return [
+    buildForgeIntentSource(targetProfileName, interview),
     {
       type: "fragment",
       name: `base-profile/${profile.name}`,
@@ -271,8 +540,10 @@ function buildForgeSources(
         `Create or refine runtime-local profile \`${targetProfileName}\`.`,
         `Base/current profile: \`${profile.name}\`.`,
         "",
-        "Use discovery and existing env/toolchain context when useful.",
-        "Keep the result compact, developer-focused, and low-intrusion unless the user asks otherwise.",
+        `Forge mode: \`${interview.mode}\`.`,
+        `Profile kind: \`${interview.kind}\`.`,
+        "Use discovery and existing env/toolchain context when useful, but do not add local env/toolchain fragments unless the interview asks for them.",
+        "Keep the result compact and aligned with the requested profile kind; do not force developer boilerplate into domain or blank profiles.",
         "",
       ].join("\n"),
     },
@@ -350,6 +621,35 @@ function buildSkillsDiscoverySource(snapshot: DiscoverySnapshot): WorkbenchSourc
     bundleFile: "sources/skills-discovery.md",
     content: lines.join("\n"),
   };
+}
+
+function buildForgeIntentSource(targetProfileName: string, interview: ForgeInterview): WorkbenchSourceMaterial {
+  const lines = [
+    "# Forge intent",
+    "",
+    `Target profile: \`${targetProfileName}\``,
+    `Mode: \`${interview.mode}\``,
+    `Kind: \`${interview.kind}\``,
+    `Base profile: \`${interview.baseProfileName}\``,
+    `Include env/toolchain by default: ${interview.includeEnv ? "yes" : "no"}`,
+    "",
+    "Selected skills:",
+    ...(interview.selectedSkills.length ? interview.selectedSkills.map((skill) => `- ${skill}`) : ["- none selected"]),
+    "",
+    "Selected deterministic fragments:",
+    ...(interview.selectedFragments ? interview.selectedFragments.map((ref) => `- ${ref}`) : ["- use base profile defaults"]),
+    "",
+    "User notes:",
+    interview.notes.trim() || "- none",
+    "",
+    "Guidance:",
+    "- If mode is guided and important information is missing, ask up to two focused follow-up questions before writing.",
+    "- If kind is domain/blank/subagent, do not inherit developer boilerplate unless explicitly selected above.",
+    "- Write profile metadata with a compact `kind` field.",
+    "- Treat discovery and skills as reviewable context, not automatic profile writes.",
+    "",
+  ];
+  return { type: "idea", name: "forge-intent", bundleFile: "sources/forge-intent.md", content: lines.join("\n") };
 }
 
 function buildBridgeReadinessSource(snapshot: DiscoverySnapshot): WorkbenchSourceMaterial {
@@ -710,6 +1010,11 @@ function buildDeploymentFragment(deployment: string): string {
   ].join("\n");
 }
 
+function requireProfileNameSlug(value: string, label: string): string {
+  if (!value) throw new Error(`${label} must contain at least one letter or number.`);
+  return value;
+}
+
 function toProfileName(value: string): string {
   return toSlug(value.replace(/^local-/, ""));
 }
@@ -733,7 +1038,7 @@ function readFlag(args: string[], flag: string): string | undefined {
 }
 
 function readPositionalName(args: string[]): string | undefined {
-  const flagsWithValues = new Set(["--name", "--from", "--profile", "--out", "--env", "--env-from"]);
+  const flagsWithValues = new Set(["--name", "--from", "--profile", "--out", "--env", "--env-from", "--open-with", "--kind", "--from-agents", "--from-agents-md", "--target"]);
   for (let idx = 0; idx < args.length; idx += 1) {
     const arg = args[idx];
     if (flagsWithValues.has(args[idx - 1])) continue;
@@ -741,6 +1046,14 @@ function readPositionalName(args: string[]): string | undefined {
     return arg;
   }
   return undefined;
+}
+
+function parseProfileKind(value: string | undefined): ProfileKind | undefined {
+  if (!value) return undefined;
+  if (["developer", "domain", "blank", "subagent"].includes(value)) return value as ProfileKind;
+  console.error(`Invalid --kind: ${value}`);
+  console.error("Use developer, domain, blank, or subagent.");
+  process.exit(1);
 }
 
 function parseEnvMode(value: string | undefined): EnvMode {

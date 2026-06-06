@@ -3,6 +3,9 @@ node_modules/
 *.log
 .DS_Store
 
+# Local SDD/agent registry artifacts; generated from machine-specific skill paths.
+.atl/
+
 # Legacy repo-local overrides — kept gitignored for migration/dev only.
 # Runtime-home state now lives under ~/.gentlesmith instead of this repo.
 fragments-local/

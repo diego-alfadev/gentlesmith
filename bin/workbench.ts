@@ -264,8 +264,8 @@ Do not edit target agent files directly. Do not edit package built-ins. Do not w
 
 ## Style constraints
 
-- Keep the profile compact and developer-focused.
-- Default to low-intrusion Jarvis-style behavior unless the user asks for a stronger persona.
+- Keep the profile compact and aligned with the requested profile kind.
+- Default to low-intrusion behavior; do not force Jarvis/developer conventions into domain, blank, or subagent profiles.
 - Prefer references or small adapted fragments over copying long skill bodies.
 - Treat \`skills:\` as simple metadata/package list for now; do not introduce structured skill objects.
 - Ask at most two focused questions before proposing writes.

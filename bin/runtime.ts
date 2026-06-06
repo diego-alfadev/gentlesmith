@@ -30,6 +30,7 @@ export const FRAGMENT_MARKER_PREFIX = `<!-- gentle-ai-overlay:${BLOCK_NAME} frag
 export interface ProfileSpec {
   name: string;
   description?: string;
+  kind?: "developer" | "domain" | "blank" | "subagent";
   include: string[];
   skills?: string[];
 }
@@ -60,6 +61,7 @@ export interface RuntimePaths {
   installedTargetsDir: string;
   stateFile: string;
   renderedDir: string;
+  discoveryDir: string;
 }
 
 export interface RuntimeState {
@@ -116,6 +118,7 @@ export function resolveRuntimePaths(): RuntimePaths {
     installedTargetsDir: join(runtimeHome, "targets"),
     stateFile: join(runtimeHome, "state.yaml"),
     renderedDir: join(runtimeHome, ".last-rendered"),
+    discoveryDir: join(runtimeHome, "discovery"),
   };
 }
 
@@ -126,6 +129,7 @@ export async function ensureRuntimeDirs(paths: RuntimePaths): Promise<void> {
   await mkdir(paths.localPresetsDir, { recursive: true });
   await mkdir(paths.installedTargetsDir, { recursive: true });
   await mkdir(paths.renderedDir, { recursive: true });
+  await mkdir(paths.discoveryDir, { recursive: true });
 }
 
 export async function loadYAML<T>(path: string): Promise<T> {

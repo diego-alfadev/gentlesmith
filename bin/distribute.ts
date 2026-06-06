@@ -682,20 +682,25 @@ function printUsage(): void {
   console.log(`gentlesmith — forge, review, and switch AI-agent profiles
 
 Recommended flow:
-  gentlesmith forge debugger                 create a reviewable profile draft bundle
+  gentlesmith forge debugger                 guided interview + reviewable draft bundle
   gentlesmith export --profile debugger       review/share the profile package
   gentlesmith apply debugger                 preview the profile switch
   gentlesmith apply debugger --apply         write the switch
 
 Primary:
-  gentlesmith forge [name]       create a reviewable profile draft bundle
+  gentlesmith forge [name]       guided interview + reviewable profile draft
   gentlesmith export             review/share a profile package
   gentlesmith apply <profile>    preview profile switch (writes only with --apply)
   gentlesmith browse             guided cockpit for forge/review/export/apply
 
 Advanced:
+  gentlesmith forge --blank      blank canvas profile draft
+  gentlesmith forge --custom     choose preset/fragments before handoff
+  gentlesmith forge --quick      skip interview for scripts/power users
+  gentlesmith forge --from-agents AGENTS.md  modularize existing agent instructions
   gentlesmith patch              create a profile patch bundle
   gentlesmith sync [--apply]     render current low-level target bindings
+  gentlesmith v1 ...             experimental profile v1 assimilate/inspect/render tools
   gentlesmith target ...         manage installed target definitions
   gentlesmith skills ...         discover/list/reference/install skills explicitly
   gentlesmith init               deterministic runtime bootstrap
@@ -787,6 +792,11 @@ async function main() {
   if (command === "export") {
     const { runExport } = await import("./export");
     await runExport(rest);
+    return;
+  }
+  if (command === "v1") {
+    const { runProfileV1Command } = await import("./profile-v1");
+    process.stdout.write(await runProfileV1Command(rest));
     return;
   }
 

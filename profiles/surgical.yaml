@@ -1,4 +1,5 @@
 name: surgical
+kind: developer
 description: Minimal developer rules — no persona, no env, no toolchain assumptions.
 include:
   - rules/safety

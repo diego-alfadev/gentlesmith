@@ -227,6 +227,15 @@ The primary product entry point is `forge --from-agents`, backed by the `modular
 gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
 ```
 
+Export a Profile v1 bundle for review or sharing:
+
+```bash
+gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --public
+```
+
+Without `--public`, export writes a local review bundle even when private/local resources exist. With `--public`, export fails if portability checks find private/local artifacts or capabilities.
+
 `assimilate` and `forge --from-agents` write `gentlesmith.profile.yaml` plus `artifacts/**.md`. Imported sections are marked `privacy: private` by default because existing agent files often contain personal or machine-specific behavior. It refuses to overwrite existing profile files; use a fresh output directory when iterating. Add `--dry-run` to preview without writing. The same flow is available in `gentlesmith browse` as “Modularize AGENTS.md into Profile v1 draft”.
 
 This is the proof test for Profile v1: an existing agent bible should become named portable pieces without losing intent. Top-level preamble before the first `##` is preserved as a `context:preamble` artifact.
@@ -257,6 +266,7 @@ Implemented and tested:
 - experimental `gentlesmith v1 catalog-agents`
 - experimental `gentlesmith v1 assimilate`
 - product-facing `gentlesmith forge --from-agents` and Browse entry point
+- Profile v1 export with capability/privacy checks and `--public` guardrail
 
 Not yet wired as the default:
 

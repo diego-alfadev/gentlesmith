@@ -690,6 +690,7 @@ Recommended flow:
 Primary:
   gentlesmith forge [name]       guided interview + reviewable profile draft
   gentlesmith export             review/share a profile package
+  gentlesmith export --public    fail if the profile is not safe for public sharing
   gentlesmith apply <profile>    preview profile switch (writes only with --apply)
   gentlesmith status             show agent/profile bindings and sync state
   gentlesmith browse             guided cockpit for forge/review/export/apply

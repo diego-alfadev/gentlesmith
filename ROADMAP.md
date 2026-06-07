@@ -85,7 +85,7 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 - [x] Add product-facing `gentlesmith forge --from-agents` and Browse entry point for modularizing existing AGENTS.md files.
 - [x] Extract AGENTS.md modularization into a UI-ready application use case under `src/application`.
 - [ ] Wire Profile v1 into `sync` after surrounding WIP is reviewed.
-- [ ] Wire Profile v1 privacy checks into `export`.
+- [x] Wire Profile v1 privacy/capability checks into `export` with a `--public` guardrail.
 - [ ] Add richer Claude/OpenCode/Pi adapters.
 
 ## P7 — Capabilities as first-class profile resources

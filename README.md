@@ -29,22 +29,30 @@ bun add -g gentlesmith@beta
 # or
 pnpm add -g gentlesmith@beta
 
-# create a reviewable profile draft bundle
-gentlesmith forge debugger
+# turn an existing AGENTS.md into a modular portable profile
+gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
 ```
 
-`forge` does **not** silently rewrite your agents. It creates a self-contained handoff bundle under `~/.gentlesmith/forges/` that your coding agent can use to write a local profile and fragments.
+`forge --from-agents` does **not** silently rewrite your agents. It creates a reviewable Profile v1 bundle with named artifacts, privacy checks, capabilities, and a safe next-step ladder.
 
 Canonical safe flow:
 
 ```bash
-gentlesmith forge debugger   # draft bundle
-# give handoff.md to your agent, review the proposed local files
-gentlesmith export --profile debugger
-gentlesmith status                         # see agent/profile bindings
-gentlesmith apply debugger                 # preview only
-gentlesmith apply debugger --apply         # write the switch
-gentlesmith status                         # verify active bindings
+gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
+gentlesmith v1 inspect --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --public # optional share check
+gentlesmith target add codex                                                     # if needed
+gentlesmith target set-profile codex .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith sync --target codex                                                  # preview only
+gentlesmith sync --target codex --apply                                          # write after review
+gentlesmith status                                                               # verify bindings
+```
+
+Classic forge is still available when you want an agent-assisted draft from scratch:
+
+```bash
+gentlesmith forge debugger
 ```
 
 Or use the cockpit:
@@ -68,6 +76,7 @@ Development from a local checkout remains possible with `bun link`, but the norm
 
 - **Profile** — a named agent behavior, e.g. `debugger`.
 - **Profile parts** — compact persona/rules/env pieces included by the profile.
+- **Capabilities** — MCPs, tools, commands, hooks, memory providers, env refs, and local path requirements tracked by the profile.
 - **Status** — current target/agent/profile bindings and sync state.
 - **Preview** — default mode; shows what would change and writes review files under `~/.gentlesmith/.last-rendered`.
 - **Apply** — only happens with `--apply`.
@@ -108,8 +117,9 @@ Primary:
 
 | Command | Purpose |
 |---|---|
+| `gentlesmith forge --from-agents AGENTS.md` | Modularize existing agent instructions into Profile v1 |
 | `gentlesmith forge [name]` | Create a reviewable profile draft bundle |
-| `gentlesmith export --profile <profile>` | Review/share a profile package |
+| `gentlesmith export --profile <profile>` | Review/share a profile package; add `--public` to enforce public portability |
 | `gentlesmith apply <profile>` | Preview a profile switch; writes only with `--apply` |
 | `gentlesmith status` | Show target/agent/profile bindings and sync state |
 | `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
@@ -179,12 +189,14 @@ gentlesmith.profile.yaml -> artifacts/*.md -> ResourceGraph -> target adapters
 
 It keeps artifacts neutral and moves target-specific behavior into adapters/overrides.
 
-Try the current experimental commands:
+Try the current Profile v1 flow:
 
 ```bash
 gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
 gentlesmith v1 inspect --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
-gentlesmith v1 render --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --target codex
+gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith target set-profile codex .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith sync --target codex
 ```
 
 You can also launch this from `gentlesmith browse` → “Modularize AGENTS.md into Profile v1 draft”.

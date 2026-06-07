@@ -129,7 +129,7 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 
 ## Near-term UX correction
 
-- [ ] Reorder docs/TUI around `forge → review/export → preview apply → apply --apply`.
-- [ ] Add `gentlesmith status` showing target/agent, active profile, destination, sync state, and warnings.
+- [x] Reorder docs/TUI around `forge --from-agents → inspect/export → sync preview → sync --apply`.
+- [x] Add `gentlesmith status` showing target/agent, active profile, destination, sync state, and warnings.
 - [ ] Add a simple `gentlesmith upgrade` lifecycle command; keep `migrate` as legacy import.
 - [ ] Prepare a concise gentle-ai maintainer proposal around namespace and companion CLI status.

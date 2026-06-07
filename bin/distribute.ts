@@ -691,6 +691,7 @@ Primary:
   gentlesmith forge [name]       guided interview + reviewable profile draft
   gentlesmith export             review/share a profile package
   gentlesmith apply <profile>    preview profile switch (writes only with --apply)
+  gentlesmith status             show agent/profile bindings and sync state
   gentlesmith browse             guided cockpit for forge/review/export/apply
 
 Advanced:
@@ -756,6 +757,11 @@ async function main() {
   if (command === "patch") {
     const { runPatch } = await import("./patch");
     await runPatch(rest);
+    return;
+  }
+  if (command === "status") {
+    const { runStatus } = await import("./status");
+    await runStatus(rest);
     return;
   }
   if (command === "preset") {

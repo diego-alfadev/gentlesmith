@@ -1,6 +1,18 @@
 # Roadmap — gentlesmith
 
-Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI coding agents.
+Goal: make gentlesmith the forge-first harness management layer for AI coding agents.
+
+## North Star
+
+Gentlesmith is not only a persona or prompt manager. A useful agent profile must describe:
+
+- **Behavior** — personas, rules, workflows, prompts, context, and skill references.
+- **Capabilities** — MCP servers, tools, commands, hooks, memory providers, and agent-specific integrations.
+- **Environment contract** — required env vars, secret references, local paths, privacy boundaries, and portability warnings.
+
+The near-term product must optimize for **time-to-value under 5 minutes**: scan the user's current setup, explain what was found, create a reviewable modular profile, preview what will change, and then apply safely.
+
+Strategic rule: first model capabilities as first-class profile resources, then automate adapter-specific writes. Do not build broad "scan everything" or MCP-server automation before the profile model and safety checks can represent what they discover or mutate.
 
 ## P0 — Forge-first runtime
 
@@ -49,7 +61,7 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 
 - [x] Define npm package file allowlist.
 - [x] Document global install and clean-start workflow.
-- [ ] Publish package once CLI/runtime semantics stabilize.
+- [x] Publish package once CLI/runtime semantics stabilize.
 - [ ] Add release/update story that does not depend on local repo path.
 
 ## P5 — Plugin path
@@ -76,6 +88,31 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 - [ ] Wire Profile v1 privacy checks into `export`.
 - [ ] Add richer Claude/OpenCode/Pi adapters.
 
+## P7 — Capabilities as first-class profile resources
+
+- [ ] Define Profile v1 capability resources for MCP servers, tools, commands, hooks, and memory providers.
+- [ ] Define env contract fields for required variables, secret references, local-only paths, and public/private/local portability.
+- [ ] Extend `ResourceGraph` validation to report missing capabilities, unsupported target mappings, and unsafe secret material.
+- [ ] Extend `inspect`/`render` to show behavior + capabilities + environment contract, not only markdown output.
+- [ ] Add adapter capability matrix for Claude Code, Codex, OpenCode, Antigravity, Pi, and gentle-ai.
+- [ ] Start with "detect and warn" for capabilities before writing full target-specific MCP/tool/hook config.
+
+## P8 — Time-to-value scan path
+
+- [ ] Turn existing discovery + `forge --from-agents` into a guided "scan current setup" flow.
+- [ ] Detect existing agent configs, active profiles, installed skills, MCP hints, and known toolchain integrations.
+- [ ] Generate a reviewable profile draft with clear sections: imported behavior, detected capabilities, unresolved gaps, and private/local assumptions.
+- [ ] Keep scan output safe by default: never persist secret values, only references such as `${env:KEY}`.
+- [ ] Add a short success path: `forge --scan` → `status` → `v1 inspect` → preview apply.
+
+## P9 — Agent-facing Gentlesmith MCP
+
+- [ ] Design Gentlesmith MCP server as a controlled mutation interface, not a raw filesystem editor.
+- [ ] Start read-only: `read_active_profiles`, `list_profile_resources`, `explain_profile_gaps`.
+- [ ] Add write tools only after audit/approval exists: `add_rule`, `update_workflow`, `add_capability_to_profile`.
+- [ ] Require audit log and explicit user confirmation for profile mutations made through an agent.
+- [ ] Keep this behind the CLI/TUI foundation; do not let MCP-server scope delay `sync`, `status`, export privacy, or scan UX.
+
 ## Later — Profile evaluation
 
 - [x] Add `gentlesmith patch` CLI bundle flow for adapting installed skills or free-form ideas into profile fragments.
@@ -88,5 +125,6 @@ Goal: make gentlesmith the forge-first customization layer for gentle-ai and AI 
 ## Near-term UX correction
 
 - [ ] Reorder docs/TUI around `forge → review/export → preview apply → apply --apply`.
+- [ ] Add `gentlesmith status` showing target/agent, active profile, destination, sync state, and warnings.
 - [ ] Add a simple `gentlesmith upgrade` lifecycle command; keep `migrate` as legacy import.
 - [ ] Prepare a concise gentle-ai maintainer proposal around namespace and companion CLI status.

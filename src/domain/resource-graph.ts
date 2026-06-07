@@ -75,7 +75,7 @@ export async function buildResourceGraph(
   }
 
   assertArtifactDependenciesResolve(nodes, edges);
-  warnings.push(...collectCapabilityWarnings(capabilities, edges));
+  warnings.push(...collectCapabilityWarnings(profile, capabilities, edges));
 
   return { profile, nodes, edges, capabilities, warnings };
 }
@@ -98,6 +98,7 @@ function addRequiresEdges(
 }
 
 function collectCapabilityWarnings(
+  profile: ProfileManifestV1,
   capabilities: ProfileCapabilityRef[],
   edges: ResourceGraphEdge[],
 ): string[] {
@@ -109,6 +110,20 @@ function collectCapabilityWarnings(
       warnings.push(`Capability dependency not declared: ${edge.to} required by ${edge.from}`);
     }
   }
+
+  const targetNames = Object.keys(profile.targets ?? {});
+  if (targetNames.length === 0) return warnings;
+
+  for (const capability of capabilities) {
+    if (!capability.targets || capability.targets.length === 0) continue;
+    const supported = new Set(capability.targets);
+    for (const targetName of targetNames) {
+      if (!supported.has(targetName)) {
+        warnings.push(`Capability ${capability.id} is not declared for target ${targetName}`);
+      }
+    }
+  }
+
   return warnings;
 }
 

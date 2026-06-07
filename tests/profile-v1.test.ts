@@ -355,6 +355,20 @@ describe("resource graph and rendering", () => {
     expect(graph.warnings).toContain("Capability dependency not declared: coolify-api required by coolify-deploy");
   });
 
+
+  test("warns when capabilities are not mapped for declared targets", async () => {
+    const profile = await loadProfileManifest(join(fixtures, "basic", "gentlesmith.profile.yaml"));
+    const graph = await buildResourceGraph({
+      ...profile,
+      targets: {
+        codex: { adapter: "markdown-managed-block" },
+        opencode: { adapter: "markdown-managed-block" },
+      },
+    }, { baseDir: join(fixtures, "basic") });
+
+    expect(graph.warnings).toContain("Capability context7 is not declared for target opencode");
+  });
+
   test("rejects capability env values because secrets must be referenced, not stored", () => {
     expect(() => parseProfileManifest(`
 schemaVersion: 1

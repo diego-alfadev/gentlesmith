@@ -41,8 +41,10 @@ Canonical safe flow:
 gentlesmith forge debugger   # draft bundle
 # give handoff.md to your agent, review the proposed local files
 gentlesmith export --profile debugger
+gentlesmith status                         # see agent/profile bindings
 gentlesmith apply debugger                 # preview only
 gentlesmith apply debugger --apply         # write the switch
+gentlesmith status                         # verify active bindings
 ```
 
 Or use the cockpit:
@@ -66,6 +68,7 @@ Development from a local checkout remains possible with `bun link`, but the norm
 
 - **Profile** — a named agent behavior, e.g. `debugger`.
 - **Profile parts** — compact persona/rules/env pieces included by the profile.
+- **Status** — current target/agent/profile bindings and sync state.
 - **Preview** — default mode; shows what would change and writes review files under `~/.gentlesmith/.last-rendered`.
 - **Apply** — only happens with `--apply`.
 - **Export** — a review/share package for one profile.
@@ -108,6 +111,7 @@ Primary:
 | `gentlesmith forge [name]` | Create a reviewable profile draft bundle |
 | `gentlesmith export --profile <profile>` | Review/share a profile package |
 | `gentlesmith apply <profile>` | Preview a profile switch; writes only with `--apply` |
+| `gentlesmith status` | Show target/agent/profile bindings and sync state |
 | `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
 
 Advanced:
@@ -131,8 +135,10 @@ Advanced:
 Most users should not need to think about them every day:
 
 ```bash
+gentlesmith status                  # inspect current bindings
 gentlesmith apply debugger          # preview switch to debugger/debugger
 gentlesmith apply debugger --apply  # write target bindings and rendered outputs
+gentlesmith status                  # verify active bindings
 gentlesmith apply jarvis --apply    # switch back
 ```
 

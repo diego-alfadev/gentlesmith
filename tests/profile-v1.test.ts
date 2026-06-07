@@ -8,6 +8,7 @@ import {
 } from "../src/domain/artifact";
 import { loadProfileManifest, parseProfileManifest } from "../src/domain/profile";
 import { buildResourceGraph } from "../src/domain/resource-graph";
+import { buildCapabilityMatrix } from "../src/domain/capability-matrix";
 import { checkPublicExportPortability } from "../src/domain/validation";
 import { renderManagedMarkdown } from "../src/adapters/markdown-managed-block";
 import { catalogAgentsMarkdown } from "../src/importers/agents-cataloger";
@@ -367,6 +368,38 @@ describe("resource graph and rendering", () => {
     }, { baseDir: join(fixtures, "basic") });
 
     expect(graph.warnings).toContain("Capability context7 is not declared for target opencode");
+  });
+
+
+  test("builds a conservative capability target matrix", async () => {
+    const profile = await loadProfileManifest(join(fixtures, "basic", "gentlesmith.profile.yaml"));
+    const matrix = buildCapabilityMatrix({
+      ...profile,
+      targets: {
+        codex: { adapter: "markdown-managed-block" },
+        opencode: { adapter: "markdown-managed-block" },
+        unknown: { adapter: "markdown-managed-block" },
+      },
+    });
+
+    expect(matrix).toContainEqual(expect.objectContaining({
+      target: "codex",
+      capability: "context7",
+      type: "mcp",
+      level: "detect-only",
+    }));
+    expect(matrix).toContainEqual(expect.objectContaining({
+      target: "opencode",
+      capability: "context7",
+      type: "mcp",
+      level: "not-declared",
+    }));
+    expect(matrix).toContainEqual(expect.objectContaining({
+      target: "unknown",
+      capability: "coolify-api",
+      type: "tool",
+      level: "unsupported",
+    }));
   });
 
   test("rejects capability env values because secrets must be referenced, not stored", () => {

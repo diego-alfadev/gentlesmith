@@ -91,6 +91,21 @@ Rules:
 - Artifacts can require capabilities by id through `requires.capabilities`.
 - Missing capability declarations are graph warnings today; adapter-specific writes come later.
 
+### Capability target matrix
+
+`gentlesmith v1 inspect` also derives a conservative matrix for declared targets.
+
+Current levels:
+
+| Level | Meaning |
+|---|---|
+| `detect-only` | Gentlesmith can model, inspect, and warn, but does not write target-specific config yet. |
+| `not-declared` | The capability has an explicit `targets` list and the profile target is not included. |
+| `unsupported` | Gentlesmith has no matrix entry for that target yet. |
+| `adapter-managed` | Reserved for future adapters that safely write target-specific config. |
+
+This is intentionally conservative: the matrix prevents false portability claims before adapter-specific MCP/tool/hook writes exist.
+
 ## Artifact frontmatter
 
 Required:
@@ -221,6 +236,7 @@ Implemented and tested:
 - workflow procedural validation
 - ResourceGraph derivation
 - first-class capability resources for MCPs/tools/commands/hooks/memory
+- conservative capability target matrix in `v1 inspect`
 - capability dependency warnings when artifacts require undeclared capabilities
 - env contract validation that rejects stored secret values
 - duplicate identity detection

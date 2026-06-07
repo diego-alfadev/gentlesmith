@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import { renderManagedMarkdown } from "../src/adapters/markdown-managed-block";
 import { loadProfileManifest } from "../src/domain/profile";
 import { buildResourceGraph } from "../src/domain/resource-graph";
+import { buildCapabilityMatrix } from "../src/domain/capability-matrix";
 import { checkPublicExportPortability } from "../src/domain/validation";
 import { catalogAgentsMarkdown } from "../src/importers/agents-cataloger";
 import { modularizeAgentsProfile, type ModularizeAgentsResult } from "../src/application/modularize-agents";
@@ -117,6 +118,7 @@ async function runInspect(args: string[]): Promise<string> {
       targets: capability.targets ?? [],
       overrides: capability.overrides ?? {},
     })),
+    capabilityMatrix: buildCapabilityMatrix(graph.profile),
     environment: graph.capabilities.flatMap((capability) => (capability.env ?? []).map((env) => ({
       capability: capability.id,
       name: env.name,
@@ -162,6 +164,13 @@ async function runInspect(args: string[]): Promise<string> {
         const flags = [env.required ? "required" : "optional", env.secret ? "secret-ref" : "env-ref"].join(", ");
         lines.push(`  env ${env.name} (${flags})`);
       }
+    }
+  }
+
+  if (summary.capabilityMatrix.length > 0) {
+    lines.push("", "Capability target matrix:");
+    for (const cell of summary.capabilityMatrix) {
+      lines.push(`- ${cell.target}: ${cell.capability} [${cell.type}] ${cell.level}`);
     }
   }
 

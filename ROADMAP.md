@@ -96,8 +96,9 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 - [x] Extend `ResourceGraph` validation to report unsupported target mappings.
 - [ ] Extend `ResourceGraph` validation to report local-only paths and unsafe secret material beyond env values.
 - [x] Extend `inspect` to show behavior + capabilities + environment contract.
-- [ ] Add adapter capability matrix for Claude Code, Codex, OpenCode, Antigravity, Pi, and gentle-ai.
-- [ ] Start with "detect and warn" for capabilities before writing full target-specific MCP/tool/hook config.
+- [x] Add conservative adapter capability matrix for Claude Code, Codex, OpenCode, Antigravity, Pi, and gentle-ai.
+- [x] Start with "detect and warn" for capabilities before writing full target-specific MCP/tool/hook config.
+- [ ] Promote selected capabilities from `detect-only` to adapter-managed writes once each target contract is verified.
 
 ## P8 — Time-to-value scan path
 

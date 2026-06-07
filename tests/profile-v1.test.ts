@@ -28,6 +28,7 @@ describe("profile v1 manifest and artifacts", () => {
     expect(profile.artifacts).toHaveLength(4);
     expect(profile.capabilities?.map((capability) => capability.id)).toEqual(["context7", "coolify-api"]);
     expect(profile.capabilities?.[1].env?.[0]).toMatchObject({ name: "COOLIFY_TOKEN", secret: true, required: true });
+    expect(profile.capabilities?.[1].localPaths?.[0]).toMatchObject({ path: "~/.config/coolify/config.json", required: false });
     expect(profile.artifacts[0]).toEqual({
       ref: "artifacts/rules/safety.md",
       exposure: "embed",
@@ -370,6 +371,23 @@ describe("resource graph and rendering", () => {
     expect(graph.warnings).toContain("Capability context7 is not declared for target opencode");
   });
 
+
+
+  test("warns when public capabilities declare local-only paths", async () => {
+    const profile = await loadProfileManifest(join(fixtures, "basic", "gentlesmith.profile.yaml"));
+    const graph = await buildResourceGraph({
+      ...profile,
+      capabilities: [{
+        id: "public-local-tool",
+        type: "tool",
+        description: "Public tool with local path.",
+        privacy: "public",
+        localPaths: [{ path: "~/.config/tool/config.json" }],
+      }],
+    }, { baseDir: join(fixtures, "basic") });
+
+    expect(graph.warnings).toContain("Capability public-local-tool declares localPaths but is marked public");
+  });
 
   test("builds a conservative capability target matrix", async () => {
     const profile = await loadProfileManifest(join(fixtures, "basic", "gentlesmith.profile.yaml"));

@@ -115,6 +115,7 @@ async function runInspect(args: string[]): Promise<string> {
       privacy: capability.privacy ?? "public",
       description: capability.description,
       env: capability.env ?? [],
+      localPaths: capability.localPaths ?? [],
       targets: capability.targets ?? [],
       overrides: capability.overrides ?? {},
     })),
@@ -125,6 +126,12 @@ async function runInspect(args: string[]): Promise<string> {
       required: env.required ?? true,
       secret: env.secret ?? false,
       description: env.description,
+    }))),
+    localPaths: graph.capabilities.flatMap((capability) => (capability.localPaths ?? []).map((localPath) => ({
+      capability: capability.id,
+      path: localPath.path,
+      required: localPath.required ?? true,
+      description: localPath.description,
     }))),
     nodes: graph.nodes.map((node) => ({
       id: node.id,
@@ -163,6 +170,10 @@ async function runInspect(args: string[]): Promise<string> {
       for (const env of capability.env) {
         const flags = [env.required ? "required" : "optional", env.secret ? "secret-ref" : "env-ref"].join(", ");
         lines.push(`  env ${env.name} (${flags})`);
+      }
+      for (const localPath of capability.localPaths) {
+        const flags = localPath.required ? "required" : "optional";
+        lines.push(`  path ${localPath.path} (${flags}, local-only)`);
       }
     }
   }

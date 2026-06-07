@@ -82,6 +82,10 @@ capabilities:
         required: true
         secret: true
         description: Coolify API token from the local environment.
+    localPaths:
+      - path: ~/.config/coolify/config.json
+        required: false
+        description: Optional local Coolify CLI config.
 ```
 
 Rules:
@@ -90,6 +94,7 @@ Rules:
 - `env[].value` is rejected. Use `${env:NAME}` semantics at adapter/render time instead.
 - Artifacts can require capabilities by id through `requires.capabilities`.
 - Missing capability declarations are graph warnings today; adapter-specific writes come later.
+- `localPaths` are always treated as machine-specific. Public capabilities with local paths produce warnings.
 
 ### Capability target matrix
 
@@ -239,6 +244,7 @@ Implemented and tested:
 - conservative capability target matrix in `v1 inspect`
 - capability dependency warnings when artifacts require undeclared capabilities
 - env contract validation that rejects stored secret values
+- local-only path references for machine-specific capability requirements
 - duplicate identity detection
 - dangling `requires.artifacts` validation
 - privacy/portability checks

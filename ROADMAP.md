@@ -91,10 +91,11 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 ## P7 — Capabilities as first-class profile resources
 
 - [x] Define Profile v1 capability resources for MCP servers, tools, commands, hooks, and memory providers.
-- [x] Define env contract fields for required variables and secret references; local-only paths are still pending.
+- [x] Define env contract fields for required variables, secret references, and local-only paths.
 - [x] Extend `ResourceGraph` validation to report missing capabilities and reject inline env secret values.
 - [x] Extend `ResourceGraph` validation to report unsupported target mappings.
-- [ ] Extend `ResourceGraph` validation to report local-only paths and unsafe secret material beyond env values.
+- [x] Extend `ResourceGraph` validation to report local-only paths.
+- [ ] Extend validation to report unsafe secret material beyond env values.
 - [x] Extend `inspect` to show behavior + capabilities + environment contract.
 - [x] Add conservative adapter capability matrix for Claude Code, Codex, OpenCode, Antigravity, Pi, and gentle-ai.
 - [x] Start with "detect and warn" for capabilities before writing full target-specific MCP/tool/hook config.

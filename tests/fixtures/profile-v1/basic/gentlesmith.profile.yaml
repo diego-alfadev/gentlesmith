@@ -16,6 +16,10 @@ capabilities:
         required: true
         secret: true
         description: Coolify API token referenced from the local environment.
+    localPaths:
+      - path: ~/.config/coolify/config.json
+        required: false
+        description: Optional local Coolify CLI config.
 artifacts:
   - ref: artifacts/rules/safety.md
     exposure: embed

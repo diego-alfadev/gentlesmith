@@ -115,6 +115,12 @@ function collectCapabilityWarnings(
   if (targetNames.length === 0) return warnings;
 
   for (const capability of capabilities) {
+    if ((capability.privacy ?? "public") === "public" && capability.localPaths?.length) {
+      warnings.push(`Capability ${capability.id} declares localPaths but is marked public`);
+    }
+  }
+
+  for (const capability of capabilities) {
     if (!capability.targets || capability.targets.length === 0) continue;
     const supported = new Set(capability.targets);
     for (const targetName of targetNames) {

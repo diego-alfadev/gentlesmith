@@ -24,12 +24,19 @@ export interface ProfileEnvRef {
   description?: string;
 }
 
+export interface ProfileLocalPathRef {
+  path: string;
+  required?: boolean;
+  description?: string;
+}
+
 export interface ProfileCapabilityRef {
   id: string;
   type: ProfileCapabilityType;
   description: string;
   privacy?: Privacy;
   env?: ProfileEnvRef[];
+  localPaths?: ProfileLocalPathRef[];
   targets?: string[];
   overrides?: Record<string, unknown>;
 }
@@ -113,6 +120,7 @@ function normalizeCapabilities(value: unknown, source: string): ProfileCapabilit
 
     if (raw.privacy !== undefined) out.privacy = requirePrivacy(raw.privacy, `${source}.capabilities[${index}].privacy`);
     if (raw.env !== undefined) out.env = normalizeEnvRefs(raw.env, `${source}.capabilities[${index}].env`);
+    if (raw.localPaths !== undefined) out.localPaths = normalizeLocalPathRefs(raw.localPaths, `${source}.capabilities[${index}].localPaths`);
     if (raw.targets !== undefined) out.targets = requireStringArray(raw.targets, `${source}.capabilities[${index}].targets`);
     if (raw.overrides !== undefined) out.overrides = requireObject(raw.overrides, `${source}.capabilities[${index}].overrides`);
     return out;
@@ -133,6 +141,22 @@ function normalizeEnvRefs(value: unknown, label: string): ProfileEnvRef[] {
     const out: ProfileEnvRef = { name };
     if (raw.required !== undefined) out.required = requireBoolean(raw.required, `${label}[${index}].required`);
     if (raw.secret !== undefined) out.secret = requireBoolean(raw.secret, `${label}[${index}].secret`);
+    if (raw.description !== undefined) out.description = requireString(raw.description, `${label}[${index}].description`);
+    return out;
+  });
+}
+
+function normalizeLocalPathRefs(value: unknown, label: string): ProfileLocalPathRef[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    const raw = requireObject(item, `${label}[${index}]`);
+    const path = requireString(raw.path, `${label}[${index}].path`);
+    if (seen.has(path)) throw new Error(`${label} contains duplicate path: ${path}`);
+    seen.add(path);
+
+    const out: ProfileLocalPathRef = { path };
+    if (raw.required !== undefined) out.required = requireBoolean(raw.required, `${label}[${index}].required`);
     if (raw.description !== undefined) out.description = requireString(raw.description, `${label}[${index}].description`);
     return out;
   });

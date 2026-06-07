@@ -757,7 +757,14 @@ Advanced:
   gentlesmith init               deterministic runtime bootstrap
   gentlesmith migrate            import legacy local state
   gentlesmith update             update a git-clone install
+  gentlesmith --version          print installed gentlesmith version
 `);
+}
+
+async function printVersion(): Promise<void> {
+  const raw = await readFile(join(PACKAGE_ROOT, "package.json"), "utf8");
+  const pkg = JSON.parse(raw) as { version?: unknown };
+  console.log(typeof pkg.version === "string" ? pkg.version : "unknown");
 }
 
 async function runMigrate(): Promise<void> {
@@ -788,6 +795,10 @@ async function main() {
   }
   if (command === "help" || command === "--help" || command === "-h") {
     printUsage();
+    return;
+  }
+  if (command === "version" || command === "--version" || command === "-v") {
+    await printVersion();
     return;
   }
   if (command === "init") {

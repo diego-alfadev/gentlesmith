@@ -16,6 +16,7 @@ Never overwrite unknown user work.
 Deploy and verify Coolify apps safely.
 
 Requires skills: coolify-manager
+Requires capabilities: coolify-api
 
 # Coolify Deploy Workflow
 

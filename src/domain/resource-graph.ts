@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, posix, win32 } from "node:path";
 import { parseArtifactMarkdown, type ArtifactDocument, type Exposure } from "./artifact";
-import type { ProfileManifestV1 } from "./profile";
+import type { ProfileCapabilityRef, ProfileManifestV1 } from "./profile";
 
 export type ResourceEdgeReason = "requires" | "reference" | "discovered";
 export type ResourceEdgeTargetType = "artifact" | "skill" | "capability";
@@ -28,6 +28,7 @@ export interface ResourceGraph {
   profile: ProfileManifestV1;
   nodes: ResourceGraphNode[];
   edges: ResourceGraphEdge[];
+  capabilities: ProfileCapabilityRef[];
   warnings: string[];
 }
 
@@ -68,9 +69,15 @@ export async function buildResourceGraph(
     addRequiresEdges(edges, id, artifact.frontmatter.requires);
   }
 
-  assertArtifactDependenciesResolve(nodes, edges);
+  const capabilities = profile.capabilities ?? [];
+  for (const capability of capabilities) {
+    edges.push({ from: profile.name, to: capability.id, reason: "reference", targetType: "capability" });
+  }
 
-  return { profile, nodes, edges, warnings };
+  assertArtifactDependenciesResolve(nodes, edges);
+  warnings.push(...collectCapabilityWarnings(capabilities, edges));
+
+  return { profile, nodes, edges, capabilities, warnings };
 }
 
 function addRequiresEdges(
@@ -88,6 +95,21 @@ function addRequiresEdges(
   for (const artifact of requires.artifacts ?? []) {
     edges.push({ from, to: artifact, reason: "requires", targetType: "artifact" });
   }
+}
+
+function collectCapabilityWarnings(
+  capabilities: ProfileCapabilityRef[],
+  edges: ResourceGraphEdge[],
+): string[] {
+  const declared = new Set(capabilities.map((capability) => capability.id));
+  const warnings: string[] = [];
+  for (const edge of edges) {
+    if (edge.reason !== "requires" || edge.targetType !== "capability") continue;
+    if (!declared.has(edge.to)) {
+      warnings.push(`Capability dependency not declared: ${edge.to} required by ${edge.from}`);
+    }
+  }
+  return warnings;
 }
 
 function assertArtifactDependenciesResolve(nodes: ResourceGraphNode[], edges: ResourceGraphEdge[]): void {

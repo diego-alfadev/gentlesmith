@@ -27,6 +27,21 @@ Users author the manifest and artifacts. Gentlesmith derives the graph. Artifact
 schemaVersion: 1
 name: jarvis-portable
 description: Portable Jarvis profile for coding agents.
+capabilities:
+  - id: context7
+    type: mcp
+    description: Fetch current library documentation through Context7.
+    privacy: public
+    targets: [codex, claude]
+  - id: coolify-api
+    type: tool
+    description: Access Coolify through user-provided credentials.
+    privacy: private
+    env:
+      - name: COOLIFY_TOKEN
+        required: true
+        secret: true
+        description: Coolify API token from the local environment.
 artifacts:
   - ref: artifacts/rules/safety.md
     exposure: embed
@@ -36,6 +51,45 @@ targets:
   codex:
     adapter: markdown-managed-block
 ```
+
+## Capabilities
+
+Capabilities are first-class profile resources. They describe what the harness needs, not just what the agent should be told.
+
+Supported capability types:
+
+- `mcp`
+- `tool`
+- `command`
+- `hook`
+- `memory`
+
+A capability can declare target applicability and environment references:
+
+```yaml
+capabilities:
+  - id: context7
+    type: mcp
+    description: Fetch current library documentation through Context7.
+    privacy: public
+    targets: [codex, claude]
+  - id: coolify-api
+    type: tool
+    description: Access Coolify through user-provided credentials.
+    privacy: private
+    env:
+      - name: COOLIFY_TOKEN
+        required: true
+        secret: true
+        description: Coolify API token from the local environment.
+```
+
+Rules:
+
+- Store environment variable names, never secret values.
+- `env[].value` is rejected. Use `${env:NAME}` semantics at adapter/render time instead.
+- Artifacts can require capabilities by id through `requires.capabilities`.
+- Missing capability declarations are graph warnings today; adapter-specific writes come later.
 
 ## Artifact frontmatter
 
@@ -100,7 +154,7 @@ model: claude-sonnet # target-specific
 agent: build # target-specific
 ```
 
-Use manifest/adaptor overrides instead:
+Use manifest/adapter overrides instead:
 
 ```yaml
 artifacts:
@@ -166,6 +220,9 @@ Implemented and tested:
 - target-specific frontmatter warnings
 - workflow procedural validation
 - ResourceGraph derivation
+- first-class capability resources for MCPs/tools/commands/hooks/memory
+- capability dependency warnings when artifacts require undeclared capabilities
+- env contract validation that rejects stored secret values
 - duplicate identity detection
 - dangling `requires.artifacts` validation
 - privacy/portability checks

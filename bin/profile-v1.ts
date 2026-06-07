@@ -108,6 +108,22 @@ async function runInspect(args: string[]): Promise<string> {
       description: graph.profile.description,
       targets: graph.profile.targets ? Object.keys(graph.profile.targets).sort() : [],
     },
+    capabilities: graph.capabilities.map((capability) => ({
+      id: capability.id,
+      type: capability.type,
+      privacy: capability.privacy ?? "public",
+      description: capability.description,
+      env: capability.env ?? [],
+      targets: capability.targets ?? [],
+      overrides: capability.overrides ?? {},
+    })),
+    environment: graph.capabilities.flatMap((capability) => (capability.env ?? []).map((env) => ({
+      capability: capability.id,
+      name: env.name,
+      required: env.required ?? true,
+      secret: env.secret ?? false,
+      description: env.description,
+    }))),
     nodes: graph.nodes.map((node) => ({
       id: node.id,
       ref: node.ref,
@@ -138,10 +154,21 @@ async function runInspect(args: string[]): Promise<string> {
     lines.push(`- ${node.id} [${node.type}] exposure=${node.exposure} privacy=${node.privacy}`);
   }
 
+  if (summary.capabilities.length > 0) {
+    lines.push("", "Capabilities:");
+    for (const capability of summary.capabilities) {
+      lines.push(`- ${capability.id} [${capability.type}] privacy=${capability.privacy}`);
+      for (const env of capability.env) {
+        const flags = [env.required ? "required" : "optional", env.secret ? "secret-ref" : "env-ref"].join(", ");
+        lines.push(`  env ${env.name} (${flags})`);
+      }
+    }
+  }
+
   if (portability.issues.length > 0) {
     lines.push("", "Portability issues:");
     for (const issue of portability.issues) {
-      lines.push(`- ${issue.artifact} (${issue.privacy}) ${issue.path}`);
+      lines.push(`- ${issue.kind}: ${issue.artifact} (${issue.privacy}) ${issue.path}`);
     }
   }
 

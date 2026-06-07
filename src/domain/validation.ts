@@ -1,7 +1,10 @@
 import type { Privacy } from "./artifact";
 import type { ResourceGraph } from "./resource-graph";
 
+export type PortabilityIssueKind = "artifact" | "capability";
+
 export interface PortabilityIssue {
+  kind: PortabilityIssueKind;
   artifact: string;
   privacy: Exclude<Privacy, "public">;
   path: string;
@@ -19,9 +22,21 @@ export function checkPublicExportPortability(graph: ResourceGraph): PortabilityR
     const privacy = node.artifact.privacy ?? "public";
     if (privacy === "public") continue;
     issues.push({
+      kind: "artifact",
       artifact: node.id,
       privacy,
       path: node.ref,
+    });
+  }
+
+  for (const capability of graph.capabilities) {
+    const privacy = capability.privacy ?? "public";
+    if (privacy === "public") continue;
+    issues.push({
+      kind: "capability",
+      artifact: capability.id,
+      privacy,
+      path: `capabilities.${capability.id}`,
     });
   }
 

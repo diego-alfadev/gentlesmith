@@ -6,7 +6,7 @@ import {
   parseArtifactMarkdown,
   type ArtifactFrontmatter,
 } from "../src/domain/artifact";
-import { loadProfileManifest } from "../src/domain/profile";
+import { loadProfileManifest, parseProfileManifest } from "../src/domain/profile";
 import { buildResourceGraph } from "../src/domain/resource-graph";
 import { checkPublicExportPortability } from "../src/domain/validation";
 import { renderManagedMarkdown } from "../src/adapters/markdown-managed-block";
@@ -25,6 +25,8 @@ describe("profile v1 manifest and artifacts", () => {
     expect(profile.schemaVersion).toBe(1);
     expect(profile.name).toBe("jarvis-portable");
     expect(profile.artifacts).toHaveLength(4);
+    expect(profile.capabilities?.map((capability) => capability.id)).toEqual(["context7", "coolify-api"]);
+    expect(profile.capabilities?.[1].env?.[0]).toMatchObject({ name: "COOLIFY_TOKEN", secret: true, required: true });
     expect(profile.artifacts[0]).toEqual({
       ref: "artifacts/rules/safety.md",
       exposure: "embed",
@@ -241,6 +243,14 @@ describe("resource graph and rendering", () => {
       reason: "requires",
       targetType: "skill",
     });
+    expect(graph.edges).toContainEqual({
+      from: "coolify-deploy",
+      to: "coolify-api",
+      reason: "requires",
+      targetType: "capability",
+    });
+    expect(graph.capabilities.map((capability) => capability.id)).toEqual(["context7", "coolify-api"]);
+    expect(graph.warnings).toEqual([]);
     expect(graph.nodes.find((node) => node.id === "safety")?.overrides).toEqual({
       "markdown-managed-block": {
         title: "Operating Safety",
@@ -324,11 +334,40 @@ describe("resource graph and rendering", () => {
     expect(report.exportable).toBe(false);
     expect(report.issues).toEqual([
       {
+        kind: "artifact",
         artifact: "local-toolchain",
         privacy: "local",
         path: "artifacts/context/local-toolchain.md",
       },
     ]);
+  });
+
+  test("warns when artifacts require undeclared capabilities", async () => {
+    const raw = await readTextFixture(join(fixtures, "basic", "artifacts", "workflows", "coolify-deploy.md"));
+    const graph = await buildResourceGraph({
+      schemaVersion: 1,
+      name: "missing-capability",
+      artifacts: [{ ref: "artifacts/workflows/coolify-deploy.md" }],
+      capabilities: [],
+    }, { baseDir: join(fixtures, "basic") });
+
+    expect(raw).toContain("coolify-api");
+    expect(graph.warnings).toContain("Capability dependency not declared: coolify-api required by coolify-deploy");
+  });
+
+  test("rejects capability env values because secrets must be referenced, not stored", () => {
+    expect(() => parseProfileManifest(`
+schemaVersion: 1
+name: unsafe
+capabilities:
+  - id: private-mcp
+    type: mcp
+    description: Unsafe MCP config.
+    env:
+      - name: API_KEY
+        value: plaintext-secret
+artifacts: []
+`, "unsafe-profile.yaml")).toThrow("value is not allowed");
   });
 });
 
@@ -425,6 +464,8 @@ describe("profile v1 CLI vertical", () => {
     const parsed = JSON.parse(output);
 
     expect(parsed.profile.name).toBe("jarvis-portable");
+    expect(parsed.capabilities.map((capability: { id: string }) => capability.id)).toEqual(["context7", "coolify-api"]);
+    expect(parsed.environment).toContainEqual(expect.objectContaining({ capability: "coolify-api", name: "COOLIFY_TOKEN", secret: true }));
     expect(parsed.nodes.map((node: { id: string; exposure: string; privacy: string }) => ({
       id: node.id,
       exposure: node.exposure,
@@ -435,7 +476,13 @@ describe("profile v1 CLI vertical", () => {
       { id: "coolify-manager", exposure: "mention", privacy: "public" },
       { id: "context7", exposure: "none", privacy: "public" },
     ]);
-    expect(parsed.portability.exportable).toBe(true);
+    expect(parsed.portability.exportable).toBe(false);
+    expect(parsed.portability.issues).toContainEqual({
+      kind: "capability",
+      artifact: "coolify-api",
+      privacy: "private",
+      path: "capabilities.coolify-api",
+    });
   });
 
   test("inspects private/local artifacts with portability warnings", async () => {
@@ -447,7 +494,7 @@ describe("profile v1 CLI vertical", () => {
 
     expect(output).toContain("Profile: private-profile");
     expect(output).toContain("Portability: blocked for public export");
-    expect(output).toContain("- local-toolchain (local) artifacts/context/local-toolchain.md");
+    expect(output).toContain("- artifact: local-toolchain (local) artifacts/context/local-toolchain.md");
   });
 });
 

@@ -1,6 +1,21 @@
 schemaVersion: 1
 name: jarvis-portable
 description: Portable Jarvis profile for coding agents.
+capabilities:
+  - id: context7
+    type: mcp
+    description: Fetch current library documentation through Context7.
+    privacy: public
+    targets: [codex, claude]
+  - id: coolify-api
+    type: tool
+    description: Access Coolify deployment API through user-provided credentials.
+    privacy: private
+    env:
+      - name: COOLIFY_TOKEN
+        required: true
+        secret: true
+        description: Coolify API token referenced from the local environment.
 artifacts:
   - ref: artifacts/rules/safety.md
     exposure: embed

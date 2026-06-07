@@ -5,6 +5,8 @@ description: Deploy and verify Coolify apps safely.
 requires:
   skills:
     - coolify-manager
+  capabilities:
+    - coolify-api
 privacy: public
 ---
 

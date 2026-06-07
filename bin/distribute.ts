@@ -5,6 +5,9 @@ import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { parse as parseYAML } from "yaml";
+import { renderManagedMarkdown } from "../src/adapters/markdown-managed-block";
+import { loadProfileManifest } from "../src/domain/profile";
+import { buildResourceGraph } from "../src/domain/resource-graph";
 import {
   BLOCK_RE,
   BLOCK_START,
@@ -44,6 +47,7 @@ interface RenderPlan {
   profile: ProfileSpec;
   destinationResolved: string;
   composed: string;
+  warnings: string[];
   finalContent: string;
   preExisting: boolean;
   changeType: ChangeType;
@@ -181,9 +185,50 @@ function assertNoTargetDestinationCollisions(targets: NamedTarget[]): void {
   process.exit(1);
 }
 
+async function loadComposableProfile(profileRef: string, agentName: string, targetName?: string): Promise<{ profile: ProfileSpec; composed: string; warnings: string[] }> {
+  if (isProfileV1Path(profileRef)) {
+    const profilePath = resolveUserPath(profileRef);
+    const profileV1 = await loadProfileManifest(profilePath);
+    const declaredTargets = Object.keys(profileV1.targets ?? {});
+    const renderTarget = chooseProfileV1Target(profileV1.targets, targetName, agentName);
+    const graph = await buildResourceGraph(profileV1, { baseDir: dirname(profilePath) });
+    const rendered = renderManagedMarkdown({ graph, targetName: renderTarget });
+    return {
+      profile: {
+        name: profileV1.name,
+        description: profileV1.description,
+        include: graph.nodes.map((node) => node.ref),
+      },
+      composed: rendered.content.trim(),
+      warnings: [
+        ...graph.warnings,
+        ...rendered.warnings,
+        ...(declaredTargets.length === 0 ? ["Profile v1 declares no targets; rendered with markdown-managed-block fallback."] : []),
+      ],
+    };
+  }
+
+  const profile = await loadProfile(PATHS, profileRef);
+  return { profile, composed: await composeFragments(profile, agentName), warnings: [] };
+}
+
+function chooseProfileV1Target(
+  targets: Record<string, unknown> | undefined,
+  targetName: string | undefined,
+  agentName: string,
+): string {
+  if (!targets || Object.keys(targets).length === 0) return targetName ?? agentName;
+  if (targetName && targetName in targets) return targetName;
+  if (agentName in targets) return agentName;
+  throw new Error(`Profile v1 does not declare target ${targetName ?? agentName}.`);
+}
+
+function isProfileV1Path(input: string): boolean {
+  return existsSync(resolveUserPath(input)) && input.endsWith(".yaml");
+}
+
 async function planTarget(name: string, target: TargetSpec, args: string[]): Promise<RenderPlan | null> {
-  const profile = await loadProfile(PATHS, target.profile);
-  const composed = await composeFragments(profile, target.agent);
+  const { profile, composed, warnings } = await loadComposableProfile(target.profile, target.agent, name);
   const block = wrapManagedBlock(composed);
   const destinationResolved = resolveUserPath(target.destination);
 
@@ -233,6 +278,7 @@ async function planTarget(name: string, target: TargetSpec, args: string[]): Pro
     profile,
     destinationResolved,
     composed,
+    warnings,
     finalContent,
     preExisting,
     changeType,
@@ -262,6 +308,7 @@ function summarize(plan: RenderPlan, apply: boolean) {
   console.log(`  block lines:  ${blockLines}`);
   console.log(`  total lines:  ${lines}`);
   if (plan.preservedLines > 0) console.log(`  preserved:    ${plan.preservedLines} lines outside block`);
+  for (const warning of plan.warnings) console.warn(`  WARNING: ${warning}`);
 }
 
 function slugify(ref: string): string {
@@ -495,8 +542,10 @@ async function runSync(rawArgs: string[], legacyCompat = false) {
 
     if (!seenProfiles.has(spec.profile)) {
       seenProfiles.add(spec.profile);
-      const profile = await loadProfile(PATHS, spec.profile);
-      if (Array.isArray(profile.skills)) collectedSkills.push(...profile.skills);
+      if (!isProfileV1Path(spec.profile)) {
+        const profile = await loadProfile(PATHS, spec.profile);
+        if (Array.isArray(profile.skills)) collectedSkills.push(...profile.skills);
+      }
     }
   }
 

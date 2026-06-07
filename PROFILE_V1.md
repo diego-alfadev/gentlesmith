@@ -232,6 +232,10 @@ Export a Profile v1 bundle for review or sharing:
 ```bash
 gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
 gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --public
+
+# experimental sync path for managed-block/prepend targets
+gentlesmith target set-profile codex .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith sync --target codex
 ```
 
 Without `--public`, export writes a local review bundle even when private/local resources exist. With `--public`, export fails if portability checks find private/local artifacts or capabilities.
@@ -267,9 +271,10 @@ Implemented and tested:
 - experimental `gentlesmith v1 assimilate`
 - product-facing `gentlesmith forge --from-agents` and Browse entry point
 - Profile v1 export with capability/privacy checks and `--public` guardrail
+- experimental Profile v1 `sync` for managed-block/prepend targets
 
 Not yet wired as the default:
 
-- `gentlesmith sync`
-- `gentlesmith export`
+- `gentlesmith apply` profile switching for Profile v1 paths
+- Profile v1 per-fragment/OpenCode sync modes
 - richer Claude/OpenCode/Pi adapters

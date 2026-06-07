@@ -84,7 +84,8 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 - [x] Add experimental `gentlesmith v1 render`, `gentlesmith v1 inspect`, `gentlesmith v1 catalog-agents`, and `gentlesmith v1 assimilate`.
 - [x] Add product-facing `gentlesmith forge --from-agents` and Browse entry point for modularizing existing AGENTS.md files.
 - [x] Extract AGENTS.md modularization into a UI-ready application use case under `src/application`.
-- [ ] Wire Profile v1 into `sync` after surrounding WIP is reviewed.
+- [x] Wire Profile v1 into `sync` for managed-block/prepend targets after surrounding WIP is reviewed.
+- [ ] Wire Profile v1 into per-fragment/OpenCode sync modes or document why adapters stay legacy.
 - [x] Wire Profile v1 privacy/capability checks into `export` with a `--public` guardrail.
 - [ ] Add richer Claude/OpenCode/Pi adapters.
 

@@ -3,6 +3,7 @@
 import { readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { loadProfileManifest } from "../src/domain/profile";
 import {
   BLOCK_RE,
   FRAGMENT_MARKER_PREFIX,
@@ -102,9 +103,13 @@ async function setTargetProfile(name: string | undefined, profileName: string | 
   }
 
   try {
-    await loadProfile(paths, profileName);
+    if (existsSync(resolveUserPath(profileName)) && profileName.endsWith(".yaml")) {
+      await loadProfileManifest(resolveUserPath(profileName));
+    } else {
+      await loadProfile(paths, profileName);
+    }
   } catch {
-    console.error(`Profile not found: ${profileName}`);
+    console.error(`Profile not found or invalid: ${profileName}`);
     process.exit(1);
   }
 

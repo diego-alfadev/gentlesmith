@@ -585,6 +585,12 @@ describe("Profile v1 application use cases", () => {
       expect(result.manifestPath).toBe(join(outDir, "gentlesmith.profile.yaml"));
       expect(result.nextCommands.inspect).toContain("gentlesmith v1 inspect --profile");
       expect(result.nextCommands.render).toContain("--target codex");
+      expect(result.nextCommands.exportReview).toContain("gentlesmith export --profile");
+      expect(result.nextCommands.exportPublic).toContain("--public");
+      expect(result.nextCommands.addTarget).toBe("gentlesmith target add codex");
+      expect(result.nextCommands.bindTarget).toContain("gentlesmith target set-profile codex");
+      expect(result.nextCommands.previewSync).toBe("gentlesmith sync --target codex");
+      expect(result.nextCommands.applySync).toBe("gentlesmith sync --target codex --apply");
       expect(result.artifacts.map((artifact) => `${artifact.type}:${artifact.name}`)).toContain("workflow:verification");
       await expect(readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8")).rejects.toThrow();
     } finally {

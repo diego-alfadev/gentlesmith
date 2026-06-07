@@ -266,9 +266,19 @@ async function writeAgentsProfileDraft(args: ForgeArgs): Promise<void> {
     for (const warning of result.warnings) console.log(`  ! ${warning}`);
   }
   console.log("\nNext:");
-  console.log(`  1. Inspect: ${result.nextCommands.inspect}`);
-  console.log(`  2. Render:  ${result.nextCommands.render}`);
-  console.log("  3. Review/edit the artifact files before exporting or applying anywhere.");
+  console.log("  1. Inspect the modular profile:");
+  console.log(`     ${result.nextCommands.inspect}`);
+  console.log("  2. Export a local review bundle:");
+  console.log(`     ${result.nextCommands.exportReview}`);
+  console.log("  3. Optional public-share check:");
+  console.log(`     ${result.nextCommands.exportPublic}`);
+  console.log("  4. Optional sync preview for this target:");
+  console.log(`     ${result.nextCommands.addTarget}        # if the target is not installed yet`);
+  console.log(`     ${result.nextCommands.bindTarget}`);
+  console.log(`     ${result.nextCommands.previewSync}`);
+  console.log("  5. Apply only after reviewing the preview:");
+  console.log(`     ${result.nextCommands.applySync}`);
+  console.log("\nReview/edit the artifact files before exporting or applying anywhere.");
 }
 
 function openForgeHandoff(openWith: string, bundleDir: string, handoffPath: string): void {

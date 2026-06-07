@@ -30,6 +30,12 @@ export interface ModularizeAgentsResult {
   nextCommands: {
     inspect: string;
     render: string;
+    exportReview: string;
+    exportPublic: string;
+    addTarget: string;
+    bindTarget: string;
+    previewSync: string;
+    applySync: string;
   };
 }
 
@@ -64,6 +70,12 @@ export async function modularizeAgentsProfile(input: ModularizeAgentsInput): Pro
     nextCommands: {
       inspect: `gentlesmith v1 inspect --profile ${bundle.manifestPath}`,
       render: `gentlesmith v1 render --profile ${bundle.manifestPath} --target ${targetName}`,
+      exportReview: `gentlesmith export --profile ${bundle.manifestPath}`,
+      exportPublic: `gentlesmith export --profile ${bundle.manifestPath} --public`,
+      addTarget: `gentlesmith target add ${targetName}`,
+      bindTarget: `gentlesmith target set-profile ${targetName} ${bundle.manifestPath}`,
+      previewSync: `gentlesmith sync --target ${targetName}`,
+      applySync: `gentlesmith sync --target ${targetName} --apply`,
     },
   };
 }

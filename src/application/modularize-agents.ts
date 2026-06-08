@@ -1,11 +1,13 @@
 import { assimilateAgentsMarkdown, writeAssimilatedProfileBundle } from "../importers/profile-assimilator";
 import type { ArtifactType, Privacy } from "../domain/artifact";
+import type { ProfileCapabilityRef } from "../domain/profile";
 
 export interface ModularizeAgentsInput {
   sourcePath: string;
   outDir: string;
   profileName?: string;
   targetName?: string;
+  capabilities?: ProfileCapabilityRef[];
   dryRun?: boolean;
 }
 
@@ -26,6 +28,7 @@ export interface ModularizeAgentsResult {
   targetName: string;
   wroteFiles: boolean;
   artifacts: ModularizedArtifactSummary[];
+  capabilities: ProfileCapabilityRef[];
   skipped: Array<{ title: string; disposition: string; reason: string }>;
   warnings: string[];
   nextCommands: {
@@ -48,6 +51,7 @@ export async function modularizeAgentsProfile(input: ModularizeAgentsInput): Pro
     outDir: input.outDir,
     profileName,
     targetName,
+    capabilities: input.capabilities,
   });
 
   if (!input.dryRun) await writeAssimilatedProfileBundle(bundle);
@@ -67,6 +71,7 @@ export async function modularizeAgentsProfile(input: ModularizeAgentsInput): Pro
       privacy: artifact.document.frontmatter.privacy ?? "public",
       exposure: "embed",
     })),
+    capabilities: bundle.manifest.capabilities ?? [],
     skipped: bundle.skipped,
     warnings: bundle.warnings,
     nextCommands: {

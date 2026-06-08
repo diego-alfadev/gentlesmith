@@ -3,7 +3,7 @@ import { lstat, mkdir, open, readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, relative, resolve } from "node:path";
 import { stringify as stringifyYAML } from "yaml";
 import type { ArtifactDocument, ArtifactType } from "../domain/artifact";
-import type { ProfileManifestV1 } from "../domain/profile";
+import type { ProfileCapabilityRef, ProfileManifestV1 } from "../domain/profile";
 import { catalogAgentsMarkdown } from "./agents-cataloger";
 
 export interface AssimilateAgentsOptions {
@@ -11,6 +11,7 @@ export interface AssimilateAgentsOptions {
   outDir: string;
   profileName?: string;
   targetName?: string;
+  capabilities?: ProfileCapabilityRef[];
 }
 
 export interface AssimilatedArtifact {
@@ -61,6 +62,7 @@ export async function assimilateAgentsMarkdown(
       ref: artifact.ref,
       exposure: "embed",
     })),
+    ...(options.capabilities && options.capabilities.length > 0 ? { capabilities: options.capabilities } : {}),
     targets: {
       [targetName]: {
         adapter: "markdown-managed-block",

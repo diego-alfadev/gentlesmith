@@ -620,6 +620,7 @@ describe("setup scan", () => {
     await mkdir(join(home, ".gemini"), { recursive: true });
     await mkdir(cwd, { recursive: true });
     await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
+    await Bun.write(join(home, ".codex", "config.toml"), `[mcp_servers.engram]\ncommand = "/opt/homebrew/bin/engram"\n\nnotify = ["notify-bin"]\n`);
     await Bun.write(join(home, ".codex", "agents.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
     await Bun.write(join(home, ".claude", "CLAUDE.md"), "<!-- gentle-ai-overlay:gentlesmith -->\n\n## Rules\n\nGenerated.\n");
     await Bun.write(join(home, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [] }, enabledPlugins: { "engram@engram": true } }));
@@ -702,6 +703,7 @@ describe("import command", () => {
     await mkdir(join(home, ".codex"), { recursive: true });
     await mkdir(cwd, { recursive: true });
     await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
+    await Bun.write(join(home, ".codex", "config.toml"), `[mcp_servers.engram]\ncommand = "/opt/homebrew/bin/engram"\n\nnotify = ["notify-bin"]\n`);
 
     try {
       process.env.HOME = home;
@@ -716,6 +718,9 @@ describe("import command", () => {
       const manifest = await readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8");
       expect(manifest).toContain("name: jarvis");
       expect(manifest).toContain("artifacts/rules/rules.md");
+      expect(manifest).toContain("capabilities:");
+      expect(manifest).toContain("id: codex-mcp-engram");
+      expect(manifest).toContain("id: codex-hook-notify");
       await expect(readFile(join(outDir, "artifacts", "context", "goal.md"), "utf8")).rejects.toThrow();
     } finally {
       if (originalHome === undefined) delete process.env.HOME;

@@ -2,7 +2,8 @@
 
 import { join } from "node:path";
 import { modularizeAgentsProfile, type ModularizeAgentsResult } from "../src/application/modularize-agents";
-import { scanAgentSetup } from "../src/application/scan-setup";
+import { scanAgentSetup, type CapabilityCandidate } from "../src/application/scan-setup";
+import type { ProfileCapabilityRef } from "../src/domain/profile";
 import { resolveUserPath } from "./runtime";
 
 interface ImportArgs {
@@ -17,15 +18,18 @@ interface ImportArgs {
 export async function runImport(args = process.argv.slice(3)): Promise<void> {
   const parsed = parseImportArgs(args);
   const profileName = normalizeProfileName(parsed.name ?? "jarvis");
-  const sourcePath = parsed.source ? resolveUserPath(parsed.source) : await recommendedSourcePath();
+  const scan = await scanAgentSetup();
+  const sourcePath = parsed.source ? resolveUserPath(parsed.source) : recommendedSourcePath(scan);
   const outDir = resolveUserPath(parsed.out ?? `.gentlesmith-v1-draft-${slugify(profileName)}`);
   const targetName = parsed.target ?? "codex";
+  const capabilities = profileCapabilitiesForTarget(scan.capabilities, targetName);
 
   const result = await modularizeAgentsProfile({
     sourcePath,
     outDir,
     profileName: slugify(profileName),
     targetName,
+    capabilities,
     dryRun: parsed.dryRun,
   });
 
@@ -48,13 +52,29 @@ function parseImportArgs(args: string[]): ImportArgs {
   };
 }
 
-async function recommendedSourcePath(): Promise<string> {
-  const scan = await scanAgentSetup();
+function recommendedSourcePath(scan: Awaited<ReturnType<typeof scanAgentSetup>>): string {
   const recommended = scan.candidates.find((candidate) => candidate.recommended && candidate.kind === "personal-system");
   if (!recommended) {
     throw new Error("No recommended personal/system agent instructions found. Run `gentlesmith scan` or pass `--source <path>`.");
   }
   return recommended.path;
+}
+
+function profileCapabilitiesForTarget(capabilities: CapabilityCandidate[], targetName: string): ProfileCapabilityRef[] {
+  return capabilities
+    .filter((capability) => capability.target === targetName)
+    .filter((capability) => capability.kind === "mcp" || capability.kind === "hook")
+    .map((capability) => ({
+      id: slugify(`${capability.target}-${capability.kind}-${capability.id}`),
+      type: capability.kind === "mcp" ? "mcp" : "hook",
+      description: `Detected ${capability.kind} capability ${capability.id} for ${capability.target}.`,
+      privacy: "private" as const,
+      targets: [capability.target],
+      overrides: {
+        sourcePath: capability.sourcePath,
+        detectedId: capability.id,
+      },
+    }));
 }
 
 function renderImportResult(result: ModularizeAgentsResult): string {
@@ -69,6 +89,11 @@ function renderImportResult(result: ModularizeAgentsResult): string {
 
   for (const artifact of result.artifacts) {
     lines.push(`  + ${artifact.type.padEnd(14)} ${artifact.name} -> ${artifact.ref}`);
+  }
+
+  if (result.capabilities.length > 0) {
+    lines.push("", "Capabilities:");
+    for (const capability of result.capabilities) lines.push(`  + ${capability.type.padEnd(7)} ${capability.id}`);
   }
 
   if (result.skipped.length > 0) {
@@ -102,6 +127,7 @@ function importSummary(result: ModularizeAgentsResult) {
     target: result.targetName,
     wroteFiles: result.wroteFiles,
     artifacts: result.artifacts,
+    capabilities: result.capabilities,
     skipped: result.skipped,
     warnings: result.warnings,
     nextCommands: result.nextCommands,

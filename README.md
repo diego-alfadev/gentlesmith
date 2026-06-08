@@ -29,16 +29,24 @@ bun add -g gentlesmith@beta
 # or
 pnpm add -g gentlesmith@beta
 
-# turn an existing AGENTS.md into a modular portable profile
-gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
+# guided cockpit: recommended first run
+gentlesmith browse
 ```
 
-`forge --from-agents` does **not** silently rewrite your agents. It creates a reviewable Profile v1 bundle with named artifacts, privacy checks, capabilities, and a safe next-step ladder.
+The first-run experience should not require memorizing a long command. `browse` is the recommended beta entry point while the shorter scan/import flow is being shaped.
+
+If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
+
+```bash
+gentlesmith forge --from-agents ~/.codex/AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
+```
+
+`forge --from-agents` is intended first for **personal/system agent instructions** — the kind of file edited by an agent setup tool — not as a promise that project-level `AGENTS.md` overlays are fully modeled yet. It does **not** silently rewrite your agents. It creates a reviewable Profile v1 bundle with named artifacts, privacy checks, capabilities, and a safe next-step ladder.
 
 Canonical safe flow:
 
 ```bash
-gentlesmith forge --from-agents AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
+gentlesmith forge --from-agents ~/.codex/AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
 gentlesmith v1 inspect --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
 gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
 gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --public # optional share check
@@ -117,12 +125,12 @@ Primary:
 
 | Command | Purpose |
 |---|---|
-| `gentlesmith forge --from-agents AGENTS.md` | Modularize existing agent instructions into Profile v1 |
+| `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
+| `gentlesmith forge --from-agents <file>` | Modularize existing personal/system agent instructions into Profile v1 |
 | `gentlesmith forge [name]` | Create a reviewable profile draft bundle |
 | `gentlesmith export --profile <profile>` | Review/share a profile package; add `--public` to enforce public portability |
 | `gentlesmith apply <profile>` | Preview a profile switch; writes only with `--apply` |
 | `gentlesmith status` | Show target/agent/profile bindings and sync state |
-| `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
 
 Advanced:
 

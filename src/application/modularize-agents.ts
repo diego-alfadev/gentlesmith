@@ -26,6 +26,7 @@ export interface ModularizeAgentsResult {
   targetName: string;
   wroteFiles: boolean;
   artifacts: ModularizedArtifactSummary[];
+  skipped: Array<{ title: string; disposition: string; reason: string }>;
   warnings: string[];
   nextCommands: {
     inspect: string;
@@ -66,6 +67,7 @@ export async function modularizeAgentsProfile(input: ModularizeAgentsInput): Pro
       privacy: artifact.document.frontmatter.privacy ?? "public",
       exposure: "embed",
     })),
+    skipped: bundle.skipped,
     warnings: bundle.warnings,
     nextCommands: {
       inspect: `gentlesmith v1 inspect --profile ${bundle.manifestPath}`,

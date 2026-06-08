@@ -73,6 +73,7 @@ function assimilateSummary(result: ModularizeAgentsResult) {
     profile: result.profileName,
     manifest: result.manifestPath,
     artifacts: result.artifacts,
+    skipped: result.skipped,
     warnings: result.warnings,
   };
 }
@@ -88,6 +89,11 @@ function renderAssimilateSummary(result: ModularizeAgentsResult): string {
 
   for (const artifact of result.artifacts) {
     lines.push(`- ${artifact.type}: ${artifact.name} -> ${artifact.ref}`);
+  }
+
+  if (result.skipped.length > 0) {
+    lines.push("", "Skipped:");
+    for (const skipped of result.skipped) lines.push(`- ${skipped.title}: ${skipped.reason}`);
   }
 
   if (result.warnings.length > 0) {

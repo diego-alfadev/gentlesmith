@@ -261,6 +261,10 @@ async function writeAgentsProfileDraft(args: ForgeArgs): Promise<void> {
   for (const artifact of result.artifacts) {
     console.log(`  + ${artifact.type.padEnd(14)} ${artifact.name} -> ${artifact.ref}`);
   }
+  if (result.skipped.length > 0) {
+    console.log("\nSkipped:");
+    for (const skipped of result.skipped) console.log(`  - ${skipped.title}: ${skipped.reason}`);
+  }
   if (result.warnings.length > 0) {
     console.log("\nWarnings:");
     for (const warning of result.warnings) console.log(`  ! ${warning}`);

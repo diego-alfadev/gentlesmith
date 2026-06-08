@@ -16,6 +16,8 @@ import { readTextFixture } from "../src/testing/golden";
 import { runProfileV1Command } from "../bin/profile-v1";
 import { runForge } from "../bin/forge";
 import { modularizeAgentsProfile } from "../src/application/modularize-agents";
+import { scanAgentSetup } from "../src/application/scan-setup";
+import { renderScanResult } from "../bin/scan";
 
 const fixtures = join(import.meta.dir, "fixtures", "profile-v1");
 
@@ -472,6 +474,47 @@ describe("AGENTS.md cataloging", () => {
     expect(catalog.warnings).toContain('section "Preamble" cataloged as context because no stronger type matched');
   });
 
+
+
+  test("keeps gentle-ai protocol blocks together before filtering transient-looking headings", () => {
+    const catalog = catalogAgentsMarkdown(`<!-- gentle-ai:engram-protocol -->
+## Engram Persistent Memory — Protocol
+
+Before ending, call mem_session_summary:
+
+## Goal
+[What we were working on]
+
+## Next Steps
+[What remains]
+<!-- /gentle-ai:engram-protocol -->
+
+## Next Steps
+
+Ship the previous sprint.
+`);
+
+    expect(catalog.artifacts.map((artifact) => artifact.frontmatter.name)).toEqual([
+      "engram-persistent-memory-protocol",
+    ]);
+    expect(catalog.artifacts[0].body).toContain("## Goal");
+    expect(catalog.artifacts[0].body).toContain("## Next Steps");
+    expect(catalog.skipped).toEqual([
+      {
+        title: "Next Steps",
+        disposition: "exclude",
+        reason: "looks like session/runtime state rather than durable profile behavior",
+      },
+    ]);
+  });
+
+  test("excludes standalone transient sections from durable AGENTS.md artifacts", () => {
+    const catalog = catalogAgentsMarkdown("## Rules\n\nAlways verify.\n\n## Goal\n\nFinish yesterday's task.\n");
+
+    expect(catalog.artifacts.map((artifact) => artifact.frontmatter.name)).toEqual(["rules"]);
+    expect(catalog.skipped.map((section) => section.title)).toEqual(["Goal"]);
+  });
+
   test("deduplicates cataloged section names before assimilation", () => {
     const catalog = catalogAgentsMarkdown("# AGENTS.md\n\n## Rules\n\nFirst.\n\n## Rules\n\nSecond.\n");
 
@@ -564,6 +607,44 @@ describe("profile v1 CLI vertical", () => {
 });
 
 
+
+
+describe("setup scan", () => {
+  test("classifies personal, generated, and project instruction sources", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-scan-"));
+    const home = join(root, "home");
+    const cwd = join(root, "workspace");
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await mkdir(join(home, ".claude"), { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
+    await Bun.write(join(home, ".codex", "agents.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
+    await Bun.write(join(home, ".claude", "CLAUDE.md"), "<!-- gentle-ai-overlay:gentlesmith -->\n\n## Rules\n\nGenerated.\n");
+    await Bun.write(join(cwd, "AGENTS.md"), "## Workspace Direction\n\nProject-only rules.\n");
+
+    try {
+      const result = await scanAgentSetup({ cwd, homeDir: home });
+      const byPath = new Map(result.candidates.map((candidate) => [candidate.path, candidate]));
+
+      expect(byPath.get(join(home, ".codex", "AGENTS.md"))?.kind).toBe("personal-system");
+      expect(byPath.get(join(home, ".codex", "AGENTS.md"))?.recommended).toBe(true);
+      expect(byPath.get(join(home, ".codex", "AGENTS.md"))?.sections.exclude).toBe(1);
+      expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.kind).toBe("generated");
+      expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.recommended).toBe(false);
+      expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.sections.import).toBe(0);
+      expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.sections.review).toBe(2);
+      expect(byPath.get(join(cwd, "AGENTS.md"))?.kind).toBe("project-overlay");
+      expect(result.warnings).toContain(`skipped duplicate source ${join(home, ".codex", "agents.md")}; same content as ${join(home, ".codex", "AGENTS.md")}`);
+
+      const rendered = renderScanResult(result);
+      expect(rendered).toContain("gentlesmith — scan");
+      expect(rendered).toContain("Recommended next step:");
+      expect(rendered).toContain("gentlesmith forge --from-agents");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("Profile v1 application use cases", () => {
   test("modularizes AGENTS.md into a UI-ready result model", async () => {

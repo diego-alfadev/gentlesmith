@@ -29,11 +29,14 @@ bun add -g gentlesmith@beta
 # or
 pnpm add -g gentlesmith@beta
 
-# guided cockpit: recommended first run
+# scan your local harness first
+gentlesmith scan
+
+# then use the guided cockpit
 gentlesmith browse
 ```
 
-The first-run experience should not require memorizing a long command. `browse` is the recommended beta entry point while the shorter scan/import flow is being shaped.
+The first-run experience should not require memorizing a long command. `scan` is read-only: it detects personal/system instruction files, generated Gentlesmith output, and project overlays before you decide what to import.
 
 If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
 
@@ -125,6 +128,7 @@ Primary:
 
 | Command | Purpose |
 |---|---|
+| `gentlesmith scan` | Read-only detection of importable agent instruction sources |
 | `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
 | `gentlesmith forge --from-agents <file>` | Modularize existing personal/system agent instructions into Profile v1 |
 | `gentlesmith forge [name]` | Create a reviewable profile draft bundle |

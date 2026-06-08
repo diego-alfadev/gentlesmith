@@ -25,6 +25,7 @@ export interface AssimilatedProfileBundle {
   manifestPath: string;
   manifestContent: string;
   artifacts: AssimilatedArtifact[];
+  skipped: Array<{ title: string; disposition: string; reason: string }>;
   warnings: string[];
 }
 
@@ -72,6 +73,7 @@ export async function assimilateAgentsMarkdown(
     manifestPath: join(options.outDir, "gentlesmith.profile.yaml"),
     manifestContent: stringifyProfileManifest(manifest),
     artifacts,
+    skipped: catalog.skipped,
     warnings: catalog.warnings,
   };
 }

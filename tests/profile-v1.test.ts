@@ -15,6 +15,7 @@ import { catalogAgentsMarkdown } from "../src/importers/agents-cataloger";
 import { readTextFixture } from "../src/testing/golden";
 import { runProfileV1Command } from "../bin/profile-v1";
 import { runForge } from "../bin/forge";
+import { runImport } from "../bin/import";
 import { modularizeAgentsProfile } from "../src/application/modularize-agents";
 import { scanAgentSetup } from "../src/application/scan-setup";
 import { renderScanResult } from "../bin/scan";
@@ -639,7 +640,7 @@ describe("setup scan", () => {
       const rendered = renderScanResult(result);
       expect(rendered).toContain("gentlesmith — scan");
       expect(rendered).toContain("Recommended next step:");
-      expect(rendered).toContain("gentlesmith forge --from-agents");
+      expect(rendered).toContain("gentlesmith import jarvis");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -676,6 +677,41 @@ describe("Profile v1 application use cases", () => {
       await expect(readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8")).rejects.toThrow();
     } finally {
       await rm(outDir, { recursive: true, force: true });
+    }
+  });
+});
+
+
+describe("import command", () => {
+  test("imports the recommended personal source from scan", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-"));
+    const home = join(root, "home");
+    const cwd = join(root, "workspace");
+    const outDir = join(root, "draft");
+    const originalHome = process.env.HOME;
+
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
+
+    try {
+      process.env.HOME = home;
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        await withMutedConsole(() => runImport(["jarvis", "--out", outDir]));
+      } finally {
+        process.chdir(previousCwd);
+      }
+
+      const manifest = await readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8");
+      expect(manifest).toContain("name: jarvis");
+      expect(manifest).toContain("artifacts/rules/rules.md");
+      await expect(readFile(join(outDir, "artifacts", "context", "goal.md"), "utf8")).rejects.toThrow();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

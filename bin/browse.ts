@@ -848,11 +848,10 @@ async function modularizeAgentsProfile() {
   });
 
   runGentlesmith([
-    "forge",
-    "--from-agents",
-    source.trim(),
-    "--name",
+    "import",
     profileName.trim(),
+    "--source",
+    source.trim(),
     "--out",
     outDir.trim(),
   ]);

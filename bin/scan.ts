@@ -45,7 +45,8 @@ export function renderScanResult(result: ScanSetupResult): string {
   const recommended = result.candidates.find((candidate) => candidate.recommended);
   if (recommended) {
     lines.push("Recommended next step:");
-    lines.push(`  gentlesmith forge --from-agents ${recommended.path} --name jarvis --target codex`);
+    lines.push("  gentlesmith import jarvis");
+    lines.push(`  ${"# uses "}${recommended.path}`);
   } else {
     lines.push("Recommended next step:");
     lines.push("  Open `gentlesmith browse` and choose the safest source manually.");

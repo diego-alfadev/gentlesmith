@@ -114,7 +114,7 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 - [x] Generate scan review with clear sections: importable behavior, generated sources, project overlays, duplicate sources, and excluded transient sections.
 - [ ] Generate a reviewable profile draft with detected capabilities, unresolved gaps, and private/local assumptions.
 - [ ] Keep scan output safe by default: never persist secret values, only references such as `${env:KEY}`.
-- [x] Add a short read-only success path: `scan` → recommended source → `forge --from-agents`.
+- [x] Add a short success path: `scan` → `import jarvis`.
 - [ ] Add a full short success path: `scan/import` → `status` → `v1 inspect` → preview apply.
 
 ## P9 — Agent-facing Gentlesmith MCP

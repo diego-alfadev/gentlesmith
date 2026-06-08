@@ -32,7 +32,10 @@ pnpm add -g gentlesmith@beta
 # scan your local harness first
 gentlesmith scan
 
-# then use the guided cockpit
+# create a draft from the recommended scanned source
+gentlesmith import jarvis
+
+# or use the guided cockpit
 gentlesmith browse
 ```
 
@@ -129,6 +132,7 @@ Primary:
 | Command | Purpose |
 |---|---|
 | `gentlesmith scan` | Read-only detection of importable agent instruction sources |
+| `gentlesmith import [name]` | Create a Profile v1 draft from the safest scanned source |
 | `gentlesmith browse` | Guided cockpit for forge/review/export/apply |
 | `gentlesmith forge --from-agents <file>` | Modularize existing personal/system agent instructions into Profile v1 |
 | `gentlesmith forge [name]` | Create a reviewable profile draft bundle |

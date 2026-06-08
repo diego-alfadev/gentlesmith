@@ -743,6 +743,7 @@ Primary:
   gentlesmith apply <profile>    preview profile switch (writes only with --apply)
   gentlesmith status             show agent/profile bindings and sync state
   gentlesmith scan               detect importable agent instruction sources
+  gentlesmith import [name]      create a draft from the safest scanned source
   gentlesmith browse             guided cockpit for forge/review/export/apply
 
 Advanced:
@@ -829,6 +830,11 @@ async function main() {
   if (command === "scan") {
     const { runScan } = await import("./scan");
     await runScan(rest);
+    return;
+  }
+  if (command === "import") {
+    const { runImport } = await import("./import");
+    await runImport(rest);
     return;
   }
   if (command === "preset") {

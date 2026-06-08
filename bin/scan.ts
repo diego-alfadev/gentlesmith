@@ -42,6 +42,16 @@ export function renderScanResult(result: ScanSetupResult): string {
     lines.push("");
   }
 
+  if (result.capabilities.length > 0) {
+    lines.push("Detected capabilities:");
+    for (const capability of result.capabilities.slice(0, 25)) {
+      const detail = capability.detail ? ` — ${capability.detail}` : "";
+      lines.push(`  - ${capability.target}: ${capability.kind}:${capability.id} (${capability.sourcePath})${detail}`);
+    }
+    if (result.capabilities.length > 25) lines.push(`  ... ${result.capabilities.length - 25} more capabilities`);
+    lines.push("");
+  }
+
   const recommended = result.candidates.find((candidate) => candidate.recommended);
   if (recommended) {
     lines.push("Recommended next step:");

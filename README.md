@@ -39,7 +39,7 @@ gentlesmith import jarvis
 gentlesmith browse
 ```
 
-The first-run experience should not require memorizing a long command. `scan` is read-only: it detects personal/system instruction files, generated Gentlesmith output, and project overlays before you decide what to import.
+The first-run experience should not require memorizing a long command. `scan` is read-only: it detects personal/system instruction files, generated Gentlesmith output, project overlays, and known MCP/plugin/hook/agent capabilities before you decide what to import.
 
 If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
 

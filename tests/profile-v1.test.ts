@@ -616,11 +616,15 @@ describe("setup scan", () => {
     const home = join(root, "home");
     const cwd = join(root, "workspace");
     await mkdir(join(home, ".codex"), { recursive: true });
-    await mkdir(join(home, ".claude"), { recursive: true });
+    await mkdir(join(home, ".claude", "mcp"), { recursive: true });
+    await mkdir(join(home, ".gemini"), { recursive: true });
     await mkdir(cwd, { recursive: true });
     await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
     await Bun.write(join(home, ".codex", "agents.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
     await Bun.write(join(home, ".claude", "CLAUDE.md"), "<!-- gentle-ai-overlay:gentlesmith -->\n\n## Rules\n\nGenerated.\n");
+    await Bun.write(join(home, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [] }, enabledPlugins: { "engram@engram": true } }));
+    await Bun.write(join(home, ".claude", "mcp", "engram.json"), "{}");
+    await Bun.write(join(home, ".gemini", "settings.json"), JSON.stringify({ mcpServers: { context7: {}, engram: {} } }));
     await Bun.write(join(cwd, "AGENTS.md"), "## Workspace Direction\n\nProject-only rules.\n");
 
     try {
@@ -636,10 +640,15 @@ describe("setup scan", () => {
       expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.sections.review).toBe(2);
       expect(byPath.get(join(cwd, "AGENTS.md"))?.kind).toBe("project-overlay");
       expect(result.warnings).toContain(`skipped duplicate source ${join(home, ".codex", "agents.md")}; same content as ${join(home, ".codex", "AGENTS.md")}`);
+      expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "claude", kind: "hook", id: "UserPromptSubmit" }));
+      expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "claude", kind: "plugin", id: "engram@engram" }));
+      expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "claude", kind: "mcp", id: "engram" }));
+      expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "gemini", kind: "mcp", id: "context7" }));
 
       const rendered = renderScanResult(result);
       expect(rendered).toContain("gentlesmith — scan");
       expect(rendered).toContain("Recommended next step:");
+      expect(rendered).toContain("Detected capabilities:");
       expect(rendered).toContain("gentlesmith import jarvis");
     } finally {
       await rm(root, { recursive: true, force: true });

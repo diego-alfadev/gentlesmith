@@ -110,9 +110,10 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 - [x] Clarify first-class scope: personal/system agent instructions first; project-level overlays later.
 - [ ] Model profile layering explicitly before selling project `AGENTS.md` assimilation as a primary use case: `personal profile > project overlay > memory/context`.
 - [x] Turn existing discovery + `forge --from-agents` into a read-only "scan current setup" entry point.
-- [ ] Detect existing agent configs, active profiles, installed skills, MCP hints, and known toolchain integrations.
+- [x] Detect existing agent instruction configs plus MCP/plugin/hook/agent capability hints.
+- [ ] Detect active profiles, installed skills, and known toolchain integrations.
 - [x] Generate scan review with clear sections: importable behavior, generated sources, project overlays, duplicate sources, and excluded transient sections.
-- [ ] Generate a reviewable profile draft with detected capabilities, unresolved gaps, and private/local assumptions.
+- [ ] Generate a reviewable profile draft with detected capabilities wired into Profile v1, unresolved gaps, and private/local assumptions.
 - [ ] Keep scan output safe by default: never persist secret values, only references such as `${env:KEY}`.
 - [x] Add a short success path: `scan` → `import jarvis`.
 - [ ] Add a full short success path: `scan/import` → `status` → `v1 inspect` → preview apply.

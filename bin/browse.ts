@@ -21,6 +21,7 @@ import {
   resolveRuntimePaths,
 } from "./runtime";
 import { discoverRuntime, summarizeDiscovery } from "./discovery";
+import { scanAgentSetup, type SourceCandidate } from "../src/application/scan-setup";
 
 const PATHS = resolveRuntimePaths();
 
@@ -787,12 +788,54 @@ function handoffChoices() {
 }
 
 async function modularizeAgentsProfile() {
-  banner("Modularize AGENTS.md");
-  const source = await input({
-    message: "AGENTS.md path:",
-    default: "AGENTS.md",
-    validate: (value) => value.trim().length > 0 || "Provide an AGENTS.md path",
-  });
+  banner("Scan / Import Agent Instructions");
+  const scan = await scanAgentSetup();
+  const ordered = [...scan.candidates].sort((a, b) => candidateRank(a) - candidateRank(b));
+
+  let source: string;
+  if (ordered.length === 0) {
+    console.log("  No known agent instruction files found.\n");
+    source = await input({
+      message: "Agent instructions path:",
+      default: "AGENTS.md",
+      validate: (value) => value.trim().length > 0 || "Provide an instructions path",
+    });
+  } else {
+    console.log("  Found sources:\n");
+    for (const candidate of ordered) {
+      const icon = candidate.recommended ? c.green("✓") : candidate.kind === "generated" ? c.yellow("!") : c.dim("·");
+      console.log(`  ${icon} ${candidate.path}`);
+      console.log(`    ${candidate.kind} · ${candidate.reason}`);
+      console.log(`    sections: import ${candidate.sections.import}, exclude ${candidate.sections.exclude}, review ${candidate.sections.review}`);
+      for (const note of candidate.notes) console.log(`    ${c.dim(note)}`);
+    }
+    if (scan.warnings.length > 0) {
+      console.log("\n  Warnings:");
+      for (const warning of scan.warnings) console.log(`  ${c.yellow("!")} ${warning}`);
+    }
+    console.log("");
+
+    source = await select({
+      message: "Source to modularize:",
+      choices: [
+        ...ordered.map((candidate) => ({
+          name: sourceChoiceLabel(candidate),
+          value: candidate.path,
+        })),
+        { name: "Manual path", value: "__manual" },
+        { name: "Back", value: "__back" },
+      ],
+    });
+    if (source === "__back") return;
+    if (source === "__manual") {
+      source = await input({
+        message: "Agent instructions path:",
+        default: "AGENTS.md",
+        validate: (value) => value.trim().length > 0 || "Provide an instructions path",
+      });
+    }
+  }
+
   const profileName = await input({
     message: "Draft profile name:",
     default: "jarvis-draft",
@@ -815,6 +858,18 @@ async function modularizeAgentsProfile() {
   ]);
   console.log("");
   await pause();
+}
+
+function candidateRank(candidate: SourceCandidate): number {
+  if (candidate.recommended) return 0;
+  if (candidate.kind === "project-overlay") return 1;
+  if (candidate.kind === "unknown") return 2;
+  return 3;
+}
+
+function sourceChoiceLabel(candidate: SourceCandidate): string {
+  const prefix = candidate.recommended ? c.green("recommended") : candidate.kind === "generated" ? c.yellow("generated") : candidate.kind;
+  return `${prefix}  ${candidate.path}  ${c.dim(`import ${candidate.sections.import}, review ${candidate.sections.review}`)}`;
 }
 
 async function improveProfile() {
@@ -927,7 +982,7 @@ export async function runBrowse(): Promise<void> {
         choices: [
           new Separator(c.dim("── workbench ──")),
           { name: `${c.green("Create")} profile (guided / blank / custom)`, value: "forge" },
-          { name: `${c.green("Modularize")} AGENTS.md into Profile v1 draft`, value: "modularize-agents" },
+          { name: `${c.green("Scan/import")} personal agent instructions`, value: "modularize-agents" },
           { name: `${c.green("Improve")} profile`, value: "improve" },
           { name: `${c.green("Apply")} profile switch`, value: "apply-profile" },
           { name: `${c.green("Review")} export/profile`, value: "export-profile" },

@@ -12,3 +12,7 @@ fragments-local/
 profiles/local-*.yaml
 targets/local-*.yaml
 presets/local-*.yaml
+
+# Local generated Profile v1 drafts and smoke artifacts.
+.gentlesmith-v1-draft*/
+.gentlesmith-smoke*/

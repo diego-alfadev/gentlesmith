@@ -38,7 +38,7 @@ export async function runStatus(_args: string[] = []): Promise<void> {
 
   if (targets.length === 0) {
     console.log("\nNo installed targets found.");
-    console.log("Run `gentlesmith init` or `gentlesmith forge --from-agents AGENTS.md` to start.");
+    console.log("Run `gentlesmith scan` to inspect your harness, then `gentlesmith import jarvis` to draft a neutral profile.");
     return;
   }
 

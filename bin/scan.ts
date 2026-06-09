@@ -26,8 +26,9 @@ export function renderScanResult(result: ScanSetupResult): string {
     return lines.join("\n");
   }
 
+  const recommended = result.candidates.find((candidate) => candidate.recommended);
   for (const candidate of result.candidates) {
-    const icon = candidate.recommended ? "✓" : candidate.kind === "generated" ? "!" : "·";
+    const icon = candidate.path === recommended?.path ? "✓" : candidate.kind === "generated" ? "!" : "·";
     lines.push(`${icon} ${candidate.path}`);
     lines.push(`  kind: ${candidate.kind}`);
     lines.push(`  confidence: ${candidate.confidence}`);
@@ -42,6 +43,21 @@ export function renderScanResult(result: ScanSetupResult): string {
     lines.push("");
   }
 
+  const personalSources = result.candidates.filter((candidate) => candidate.kind === "personal-system");
+  lines.push("Profile source guidance:");
+  if (personalSources.length > 1 && recommended) {
+    lines.push("  No agent is the master. Gentlesmith found multiple personal/system sources.");
+    lines.push(`  Default import uses the highest-ranked starter source: ${recommended.path}`);
+    lines.push("  To start from another source, run:");
+    lines.push("  gentlesmith import jarvis --source <path>");
+  } else if (recommended) {
+    lines.push("  One personal/system source is the safest starter source.");
+    lines.push("  Import stays target-neutral unless you pass --target <name>.");
+  } else {
+    lines.push("  No safe personal/system source was selected automatically.");
+  }
+  lines.push("");
+
   if (result.capabilities.length > 0) {
     lines.push("Detected capabilities:");
     for (const capability of result.capabilities.slice(0, 25)) {
@@ -52,7 +68,6 @@ export function renderScanResult(result: ScanSetupResult): string {
     lines.push("");
   }
 
-  const recommended = result.candidates.find((candidate) => candidate.recommended);
   if (recommended) {
     lines.push("Recommended next step:");
     lines.push("  gentlesmith import jarvis");

@@ -623,6 +623,7 @@ describe("setup scan", () => {
     await Bun.write(join(home, ".claude", "CLAUDE.md"), "<!-- gentle-ai-overlay:gentlesmith -->\n\n## Rules\n\nGenerated.\n");
     await Bun.write(join(home, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [] }, enabledPlugins: { "engram@engram": true } }));
     await Bun.write(join(home, ".claude", "mcp", "engram.json"), "{}");
+    await Bun.write(join(home, ".gemini", "GEMINI.md"), "## Rules\n\nPrefer concise answers.\n");
     await Bun.write(join(home, ".gemini", "settings.json"), JSON.stringify({ mcpServers: { context7: {}, engram: {} } }));
     await Bun.write(join(cwd, "AGENTS.md"), "## Workspace Direction\n\nProject-only rules.\n");
 
@@ -646,6 +647,8 @@ describe("setup scan", () => {
 
       const rendered = renderScanResult(result);
       expect(rendered).toContain("gentlesmith — scan");
+      expect(rendered).toContain("Profile source guidance:");
+      expect(rendered).toContain("No agent is the master.");
       expect(rendered).toContain("Recommended next step:");
       expect(rendered).toContain("Detected capabilities:");
       expect(rendered).toContain("gentlesmith import jarvis");

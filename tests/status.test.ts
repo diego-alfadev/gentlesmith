@@ -16,6 +16,7 @@ describe("status CLI", () => {
     expect(result.exitCode).toBe(0);
     const out = result.stdout.toString();
     expect(out).toContain("gentlesmith scan");
+    expect(out).toContain("gentlesmith coach cleanup");
     expect(out).toContain("gentlesmith import jarvis");
     expect(out).toContain("draft a neutral modular profile");
   });

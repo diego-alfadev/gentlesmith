@@ -9,10 +9,69 @@ export async function runScan(args = process.argv.slice(3)): Promise<void> {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  console.log(renderScanResult(result));
+  console.log(renderScanResult(result, { verbose: args.includes("--verbose") || args.includes("--details") }));
 }
 
-export function renderScanResult(result: ScanSetupResult): string {
+export function renderScanResult(result: ScanSetupResult, options: { verbose?: boolean } = {}): string {
+  if (!options.verbose) return renderScanSummary(result);
+  return renderScanDetails(result);
+}
+
+function renderScanSummary(result: ScanSetupResult): string {
+  const recommended = result.candidates.find((candidate) => candidate.recommended);
+  const personalSources = result.candidates.filter((candidate) => candidate.kind === "personal-system");
+  const generatedSources = result.candidates.filter((candidate) => candidate.kind === "generated");
+  const projectSources = result.candidates.filter((candidate) => candidate.kind === "project-overlay");
+
+  const lines = [
+    "gentlesmith — scan",
+    `Sources: ${result.candidates.length} found (${personalSources.length} personal, ${generatedSources.length} generated, ${projectSources.length} project)`,
+    `Capabilities: ${result.capabilities.length} detected${capabilityTargetSummary(result)}`,
+    "",
+  ];
+
+  if (recommended) {
+    lines.push("Recommended source:");
+    lines.push(`  ✓ ${recommended.path}`);
+    lines.push(`  importable sections: ${recommended.sections.import}`);
+    lines.push("");
+  } else {
+    lines.push("Recommended source:");
+    lines.push("  none selected automatically");
+    lines.push("");
+  }
+
+  if (personalSources.length > 1 && recommended) {
+    lines.push("Guidance:");
+    lines.push("  No agent is the master. This is only the safest starter source.");
+    lines.push("  Use `gentlesmith scan --verbose` to compare all files.");
+    lines.push("");
+  } else if (generatedSources.length > 0) {
+    lines.push("Guidance:");
+    lines.push("  Generated outputs were detected and will not be imported by default.");
+    lines.push("  Use `gentlesmith scan --verbose` to inspect them.");
+    lines.push("");
+  }
+
+  lines.push("Next:");
+  lines.push(`  ${result.nextAction.command}`);
+  if (result.nextAction.kind === "import-recommended") lines.push(`  # uses ${result.nextAction.sourcePath}`);
+  else lines.push(`  # ${result.nextAction.note}`);
+  lines.push("");
+  lines.push("Details:");
+  lines.push("  gentlesmith scan --verbose");
+  lines.push("  gentlesmith scan --json");
+
+  if (result.warnings.length > 0) {
+    lines.push("", `Warnings: ${result.warnings.length}`);
+    for (const warning of result.warnings.slice(0, 3)) lines.push(`  - ${warning}`);
+    if (result.warnings.length > 3) lines.push(`  ... ${result.warnings.length - 3} more warnings`);
+  }
+
+  return lines.join("\n");
+}
+
+function renderScanDetails(result: ScanSetupResult): string {
   const lines = [
     "gentlesmith — scan",
     `cwd:  ${result.cwd}`,
@@ -108,4 +167,10 @@ function capabilitiesByTarget(capabilities: ScanSetupResult["capabilities"]): Ar
     grouped.set(capability.target, [...(grouped.get(capability.target) ?? []), capability]);
   }
   return Array.from(grouped.entries()).sort(([left], [right]) => left.localeCompare(right));
+}
+
+function capabilityTargetSummary(result: ScanSetupResult): string {
+  const grouped = capabilitiesByTarget(result.capabilities);
+  if (grouped.length === 0) return "";
+  return ` across ${grouped.map(([target, capabilities]) => `${target}:${capabilities.length}`).join(", ")}`;
 }

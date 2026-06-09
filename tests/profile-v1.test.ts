@@ -684,12 +684,19 @@ describe("setup scan", () => {
 
       const rendered = renderScanResult(result);
       expect(rendered).toContain("gentlesmith — scan");
-      expect(rendered).toContain("Profile source guidance:");
-      expect(rendered).toContain("No agent is the master.");
-      expect(rendered).toContain("Recommended next step:");
-      expect(rendered).toContain("Detected capabilities:");
-      expect(rendered).toContain("  codex:");
-      expect(rendered).toContain("    - hook:notify");
+      expect(rendered).toContain("Sources: 4 found");
+      expect(rendered).toContain("Recommended source:");
+      expect(rendered).toContain("Details:");
+      expect(rendered).not.toContain("Agent instruction files:");
+
+      const verbose = renderScanResult(result, { verbose: true });
+      expect(verbose).toContain("Agent instruction files:");
+      expect(verbose).toContain("Profile source guidance:");
+      expect(verbose).toContain("No agent is the master.");
+      expect(verbose).toContain("Recommended next step:");
+      expect(verbose).toContain("Detected capabilities:");
+      expect(verbose).toContain("  codex:");
+      expect(verbose).toContain("    - hook:notify");
       expect(rendered).toContain("gentlesmith import jarvis");
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -706,7 +713,7 @@ describe("setup scan", () => {
         command: "gentlesmith browse",
         note: "Choose a source manually because no safe personal/system source was selected.",
       });
-      expect(renderScanResult(result)).toContain("Next: create a profile with `gentlesmith browse`.");
+      expect(renderScanResult(result)).toContain("gentlesmith browse");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

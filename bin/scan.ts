@@ -70,11 +70,12 @@ export function renderScanResult(result: ScanSetupResult): string {
 
   if (recommended) {
     lines.push("Recommended next step:");
-    lines.push("  gentlesmith import jarvis");
-    lines.push(`  ${"# uses "}${recommended.path}`);
+    lines.push(`  ${result.nextAction.command}`);
+    if (result.nextAction.kind === "import-recommended") lines.push(`  ${"# uses "}${result.nextAction.sourcePath}`);
   } else {
     lines.push("Recommended next step:");
-    lines.push("  Open `gentlesmith browse` and choose the safest source manually.");
+    lines.push(`  ${result.nextAction.command}`);
+    lines.push(`  ${"# "}${result.nextAction.note}`);
   }
 
   if (result.warnings.length > 0) {

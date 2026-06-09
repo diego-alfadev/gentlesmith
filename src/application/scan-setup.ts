@@ -51,8 +51,22 @@ export interface ScanSetupResult {
   homeDir: string;
   candidates: SourceCandidate[];
   capabilities: CapabilityCandidate[];
+  nextAction: ScanNextAction;
   warnings: string[];
 }
+
+export type ScanNextAction =
+  | {
+      kind: "import-recommended";
+      command: string;
+      sourcePath: string;
+      note: string;
+    }
+  | {
+      kind: "browse-manual";
+      command: string;
+      note: string;
+    };
 
 const KNOWN_PERSONAL_FILES = [
   ".codex/AGENTS.md",
@@ -100,7 +114,14 @@ export async function scanAgentSetup(input: ScanSetupInput = {}): Promise<ScanSe
   const capabilityResult = await detectCapabilities({ cwd, homeDir });
   warnings.push(...capabilityResult.warnings);
 
-  return { cwd, homeDir, candidates: rankedCandidates, capabilities: capabilityResult.capabilities, warnings };
+  return {
+    cwd,
+    homeDir,
+    candidates: rankedCandidates,
+    capabilities: capabilityResult.capabilities,
+    nextAction: buildNextAction(rankedCandidates),
+    warnings,
+  };
 }
 
 function markRecommendedSource(candidates: SourceCandidate[]): SourceCandidate[] {
@@ -114,6 +135,24 @@ function markRecommendedSource(candidates: SourceCandidate[]): SourceCandidate[]
     ...candidate,
     recommended: Boolean(recommended && candidate.path === recommended.path),
   }));
+}
+
+function buildNextAction(candidates: SourceCandidate[]): ScanNextAction {
+  const recommended = candidates.find((candidate) => candidate.recommended);
+  if (recommended) {
+    return {
+      kind: "import-recommended",
+      command: "gentlesmith import jarvis",
+      sourcePath: recommended.path,
+      note: "Draft a target-neutral profile from the highest-ranked personal/system source.",
+    };
+  }
+
+  return {
+    kind: "browse-manual",
+    command: "gentlesmith browse",
+    note: "Choose a source manually because no safe personal/system source was selected.",
+  };
 }
 
 function classifySource(path: string, source: string, roots: { cwd: string; homeDir: string }): SourceCandidate {

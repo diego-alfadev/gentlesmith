@@ -675,6 +675,12 @@ describe("setup scan", () => {
       expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "claude", kind: "plugin", id: "engram@engram" }));
       expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "claude", kind: "mcp", id: "engram" }));
       expect(result.capabilities).toContainEqual(expect.objectContaining({ target: "gemini", kind: "mcp", id: "context7" }));
+      expect(result.nextAction).toEqual({
+        kind: "import-recommended",
+        command: "gentlesmith import jarvis",
+        sourcePath: join(home, ".codex", "AGENTS.md"),
+        note: "Draft a target-neutral profile from the highest-ranked personal/system source.",
+      });
 
       const rendered = renderScanResult(result);
       expect(rendered).toContain("gentlesmith — scan");
@@ -683,6 +689,22 @@ describe("setup scan", () => {
       expect(rendered).toContain("Recommended next step:");
       expect(rendered).toContain("Detected capabilities:");
       expect(rendered).toContain("gentlesmith import jarvis");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("returns a structured manual browse action when no starter source is safe", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-scan-empty-"));
+    try {
+      const result = await scanAgentSetup({ cwd: root, homeDir: join(root, "home") });
+
+      expect(result.nextAction).toEqual({
+        kind: "browse-manual",
+        command: "gentlesmith browse",
+        note: "Choose a source manually because no safe personal/system source was selected.",
+      });
+      expect(renderScanResult(result)).toContain("Next: create a profile with `gentlesmith browse`.");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

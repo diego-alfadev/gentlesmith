@@ -22,7 +22,7 @@ import { assertImportableSource } from "../src/application/import-source";
 import { buildCleanupPlan, buildScanBrief } from "../src/application/coach-cleanup";
 import { scanAgentSetup } from "../src/application/scan-setup";
 import { renderScanResult } from "../bin/scan";
-import { renderCleanupPlan } from "../bin/coach";
+import { renderCleanupPlan, runCoach } from "../bin/coach";
 
 const fixtures = join(import.meta.dir, "fixtures", "profile-v1");
 
@@ -750,6 +750,37 @@ describe("coach cleanup", () => {
       expect(rendered).toContain("Agent handoff:");
       expect(renderCleanupPlan(plan, { includePrompt: true })).toContain("Act as a Gentlesmith profile architect.");
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("writes a reviewable cleanup handoff markdown", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-coach-out-"));
+    const home = join(root, "home");
+    const cwd = join(root, "workspace");
+    const outPath = join(root, "cleanup.md");
+    const originalHome = process.env.HOME;
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n");
+
+    try {
+      process.env.HOME = home;
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        await withMutedConsole(() => runCoach(["cleanup", "--out", outPath]));
+      } finally {
+        process.chdir(previousCwd);
+      }
+
+      const handoff = await readFile(outPath, "utf8");
+      expect(handoff).toContain("gentlesmith — coach cleanup");
+      expect(handoff).toContain("Agent handoff prompt:");
+      expect(handoff).toContain("Act as a Gentlesmith profile architect.");
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
       await rm(root, { recursive: true, force: true });
     }
   });

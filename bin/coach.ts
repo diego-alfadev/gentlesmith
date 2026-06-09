@@ -1,13 +1,22 @@
 #!/usr/bin/env bun
 
+import { writeFile } from "node:fs/promises";
 import { buildCleanupPlan, type CleanupPlan } from "../src/application/coach-cleanup";
 import { scanAgentSetup } from "../src/application/scan-setup";
+import { resolveUserPath } from "./runtime";
 
 export async function runCoach(args = process.argv.slice(3)): Promise<void> {
   const [subcommand] = args.filter((arg) => !arg.startsWith("-"));
   if (!subcommand || subcommand === "cleanup") {
     const scan = await scanAgentSetup();
     const plan = buildCleanupPlan(scan);
+    const outPath = readFlag(args, "--out");
+    if (outPath) {
+      const resolved = resolveUserPath(outPath);
+      await writeFile(resolved, renderCleanupPlan(plan, { includePrompt: true }) + "\n", "utf8");
+      console.log(`Wrote coach handoff: ${resolved}`);
+      return;
+    }
     if (args.includes("--json")) {
       console.log(JSON.stringify(plan, null, 2));
       return;
@@ -17,6 +26,12 @@ export async function runCoach(args = process.argv.slice(3)): Promise<void> {
   }
 
   throw new Error(`Unknown coach command: ${subcommand}. Try \`gentlesmith coach cleanup\`.`);
+}
+
+function readFlag(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  if (index < 0) return undefined;
+  return args[index + 1];
 }
 
 export function renderCleanupPlan(plan: CleanupPlan, options: { includePrompt?: boolean } = {}): string {

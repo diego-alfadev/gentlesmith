@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { assertImportableSource } from "../src/application/import-source";
 import { modularizeAgentsProfile, type ModularizeAgentsResult } from "../src/application/modularize-agents";
 import { scanAgentSetup, type CapabilityCandidate } from "../src/application/scan-setup";
 import type { ProfileCapabilityRef } from "../src/domain/profile";
@@ -23,7 +23,7 @@ export async function runImport(args = process.argv.slice(3)): Promise<void> {
   const explicitSourcePath = parsed.source ? resolveUserPath(parsed.source) : undefined;
   const scan = await scanAgentSetup({ extraPaths: explicitSourcePath ? [explicitSourcePath] : [] });
   const sourcePath = explicitSourcePath ?? recommendedSourcePath(scan);
-  await assertImportableSource(scan, sourcePath, parsed);
+  await assertImportableSource({ scan, sourcePath, force: parsed.force });
   const outDir = resolveUserPath(parsed.out ?? `.gentlesmith-v1-draft-${slugify(profileName)}`);
   const targetName = parsed.target;
   const capabilities = targetName ? profileCapabilitiesForTarget(scan.capabilities, targetName) : [];
@@ -63,28 +63,6 @@ function recommendedSourcePath(scan: Awaited<ReturnType<typeof scanAgentSetup>>)
     throw new Error("No recommended personal/system agent instructions found. Run `gentlesmith scan` or pass `--source <path>`.");
   }
   return recommended.path;
-}
-
-async function assertImportableSource(scan: Awaited<ReturnType<typeof scanAgentSetup>>, sourcePath: string, args: ImportArgs): Promise<void> {
-  const source = scan.candidates.find((candidate) => candidate.path === sourcePath);
-  if (args.force) return;
-  const raw = await readFile(sourcePath, "utf8");
-  const generated = source?.kind === "generated" || isGeneratedAgentOutput(raw);
-  if (!generated) return;
-
-  throw new Error([
-    `Refusing to import generated agent output: ${sourcePath}`,
-    "Generated files are rendered results, not the source of truth.",
-    "Choose a personal/system source from `gentlesmith scan`, or re-run with `--force` if you really want to catalog this file.",
-  ].join("\n"));
-}
-
-function isGeneratedAgentOutput(raw: string): boolean {
-  return [
-    "gentle-ai-overlay:gentlesmith",
-    "<!-- fragment:",
-    "agent.gentlesmith-",
-  ].some((marker) => raw.includes(marker));
 }
 
 function profileCapabilitiesForTarget(capabilities: CapabilityCandidate[], targetName: string): ProfileCapabilityRef[] {

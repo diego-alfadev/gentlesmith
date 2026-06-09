@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { isGeneratedAgentOutput } from "../domain/generated-output";
 import { catalogAgentsMarkdown } from "../importers/agents-cataloger";
 
 export type SourceKind = "personal-system" | "project-overlay" | "generated" | "unknown";
@@ -52,12 +53,6 @@ export interface ScanSetupResult {
   capabilities: CapabilityCandidate[];
   warnings: string[];
 }
-
-const GENERATED_MARKERS = [
-  "gentle-ai-overlay:gentlesmith",
-  "<!-- fragment:",
-  "agent.gentlesmith-",
-];
 
 const KNOWN_PERSONAL_FILES = [
   ".codex/AGENTS.md",
@@ -122,7 +117,7 @@ function markRecommendedSource(candidates: SourceCandidate[]): SourceCandidate[]
 }
 
 function classifySource(path: string, source: string, roots: { cwd: string; homeDir: string }): SourceCandidate {
-  const generated = GENERATED_MARKERS.some((marker) => source.includes(marker));
+  const generated = isGeneratedAgentOutput(source);
   const personal = isKnownPersonalPath(path, roots.homeDir);
   const project = isInside(path, roots.cwd) && ["AGENTS.md", "CLAUDE.md"].includes(basename(path));
   const catalog = catalogAgentsMarkdown(source);

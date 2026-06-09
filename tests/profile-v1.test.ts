@@ -10,6 +10,7 @@ import { loadProfileManifest, parseProfileManifest } from "../src/domain/profile
 import { buildResourceGraph } from "../src/domain/resource-graph";
 import { buildCapabilityMatrix } from "../src/domain/capability-matrix";
 import { checkPublicExportPortability } from "../src/domain/validation";
+import { isGeneratedAgentOutput } from "../src/domain/generated-output";
 import { renderManagedMarkdown } from "../src/adapters/markdown-managed-block";
 import { catalogAgentsMarkdown } from "../src/importers/agents-cataloger";
 import { readTextFixture } from "../src/testing/golden";
@@ -17,12 +18,20 @@ import { runProfileV1Command } from "../bin/profile-v1";
 import { runForge } from "../bin/forge";
 import { runImport } from "../bin/import";
 import { modularizeAgentsProfile } from "../src/application/modularize-agents";
+import { assertImportableSource } from "../src/application/import-source";
 import { scanAgentSetup } from "../src/application/scan-setup";
 import { renderScanResult } from "../bin/scan";
 
 const fixtures = join(import.meta.dir, "fixtures", "profile-v1");
 
 describe("profile v1 manifest and artifacts", () => {
+  test("detects generated agent outputs through shared markers", () => {
+    expect(isGeneratedAgentOutput("<!-- gentle-ai-overlay:gentlesmith -->")).toBe(true);
+    expect(isGeneratedAgentOutput("<!-- fragment: rules/safety.md (repo) -->")).toBe(true);
+    expect(isGeneratedAgentOutput("agent.gentlesmith-jarvis")).toBe(true);
+    expect(isGeneratedAgentOutput("## Rules\n\nHuman-authored source instructions.")).toBe(false);
+  });
+
   test("loads a neutral manifest without rendering target output", async () => {
     const profile = await loadProfileManifest(join(fixtures, "basic", "gentlesmith.profile.yaml"));
 
@@ -532,6 +541,26 @@ Ship the previous sprint.
     ]);
   });
 });
+
+
+describe("import source safety", () => {
+  test("blocks generated output before assimilation unless force is explicit", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-source-"));
+    const sourcePath = join(root, "AGENTS.md");
+    try {
+      await Bun.write(sourcePath, "<!-- fragment: rules/safety.md (repo) -->\n## Rules\n\nGenerated.\n");
+      const scan = await scanAgentSetup({ cwd: root, homeDir: join(root, "home"), extraPaths: [sourcePath] });
+
+      await expect(assertImportableSource({ scan, sourcePath }))
+        .rejects.toThrow("Refusing to import generated agent output");
+      await expect(assertImportableSource({ scan, sourcePath, force: true }))
+        .resolves.toBeUndefined();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 
 describe("profile v1 CLI vertical", () => {
   test("renders a v1 profile through the markdown adapter without writing files", async () => {

@@ -60,11 +60,19 @@ export function renderScanResult(result: ScanSetupResult): string {
 
   if (result.capabilities.length > 0) {
     lines.push("Detected capabilities:");
-    for (const capability of result.capabilities.slice(0, 25)) {
-      const detail = capability.detail ? ` — ${capability.detail}` : "";
-      lines.push(`  - ${capability.target}: ${capability.kind}:${capability.id} (${capability.sourcePath})${detail}`);
+    let renderedCount = 0;
+    for (const [target, capabilities] of capabilitiesByTarget(result.capabilities)) {
+      lines.push(`  ${target}:`);
+      for (const capability of capabilities.slice(0, 10)) {
+        const detail = capability.detail ? ` — ${capability.detail}` : "";
+        lines.push(`    - ${capability.kind}:${capability.id} (${capability.sourcePath})${detail}`);
+        renderedCount += 1;
+      }
+      if (capabilities.length > 10) {
+        lines.push(`    ... ${capabilities.length - 10} more ${target} capabilities`);
+      }
     }
-    if (result.capabilities.length > 25) lines.push(`  ... ${result.capabilities.length - 25} more capabilities`);
+    if (result.capabilities.length > renderedCount) lines.push(`  total: ${result.capabilities.length} capabilities`);
     lines.push("");
   }
 
@@ -92,4 +100,12 @@ function collectRepeatedFlag(args: string[], flag: string): string[] {
     if (args[index] === flag && args[index + 1]) values.push(args[index + 1]);
   }
   return values;
+}
+
+function capabilitiesByTarget(capabilities: ScanSetupResult["capabilities"]): Array<[string, ScanSetupResult["capabilities"]]> {
+  const grouped = new Map<string, ScanSetupResult["capabilities"]>();
+  for (const capability of capabilities) {
+    grouped.set(capability.target, [...(grouped.get(capability.target) ?? []), capability]);
+  }
+  return Array.from(grouped.entries()).sort(([left], [right]) => left.localeCompare(right));
 }

@@ -688,6 +688,8 @@ describe("setup scan", () => {
       expect(rendered).toContain("No agent is the master.");
       expect(rendered).toContain("Recommended next step:");
       expect(rendered).toContain("Detected capabilities:");
+      expect(rendered).toContain("  codex:");
+      expect(rendered).toContain("    - hook:notify");
       expect(rendered).toContain("gentlesmith import jarvis");
     } finally {
       await rm(root, { recursive: true, force: true });

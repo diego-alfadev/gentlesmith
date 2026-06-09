@@ -43,6 +43,8 @@ The first-run experience should not require memorizing a long command. `scan` is
 
 By default, `import` stays target-neutral: it modularizes your source into a portable profile without choosing Codex, Claude, OpenCode, Gemini, or any other target. Pass `--target <name>` only when you intentionally want to pull target-specific detected capabilities into that draft.
 
+When multiple personal/system instruction files exist, Gentlesmith does not treat any agent as the canonical master. `scan` ranks one safe starter source for convenience, but you can import any source explicitly with `gentlesmith import jarvis --source <path>`.
+
 If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
 
 ```bash

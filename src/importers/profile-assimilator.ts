@@ -40,7 +40,7 @@ export async function assimilateAgentsMarkdown(
   }
 
   const profileName = options.profileName ?? defaultProfileName(options.sourcePath);
-  const targetName = options.targetName ?? "codex";
+  const targetName = options.targetName;
   const artifacts = catalog.artifacts.map((document) => {
     const ref = artifactRef(document.frontmatter.type, document.frontmatter.name);
     return {
@@ -63,11 +63,13 @@ export async function assimilateAgentsMarkdown(
       exposure: "embed",
     })),
     ...(options.capabilities && options.capabilities.length > 0 ? { capabilities: options.capabilities } : {}),
-    targets: {
-      [targetName]: {
-        adapter: "markdown-managed-block",
+    ...(targetName ? {
+      targets: {
+        [targetName]: {
+          adapter: "markdown-managed-block",
+        },
       },
-    },
+    } : {}),
   };
 
   return {

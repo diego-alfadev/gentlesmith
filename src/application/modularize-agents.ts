@@ -25,7 +25,7 @@ export interface ModularizeAgentsResult {
   sourcePath: string;
   outDir: string;
   manifestPath: string;
-  targetName: string;
+  targetName?: string;
   wroteFiles: boolean;
   artifacts: ModularizedArtifactSummary[];
   capabilities: ProfileCapabilityRef[];
@@ -36,16 +36,16 @@ export interface ModularizeAgentsResult {
     render: string;
     exportReview: string;
     exportPublic: string;
-    addTarget: string;
-    bindTarget: string;
-    previewSync: string;
-    applySync: string;
+    addTarget?: string;
+    bindTarget?: string;
+    previewSync?: string;
+    applySync?: string;
   };
 }
 
 export async function modularizeAgentsProfile(input: ModularizeAgentsInput): Promise<ModularizeAgentsResult> {
   const profileName = normalizeOptionalProfileName(input.profileName);
-  const targetName = input.targetName ?? "codex";
+  const targetName = input.targetName;
   const bundle = await assimilateAgentsMarkdown({
     sourcePath: input.sourcePath,
     outDir: input.outDir,
@@ -76,13 +76,17 @@ export async function modularizeAgentsProfile(input: ModularizeAgentsInput): Pro
     warnings: bundle.warnings,
     nextCommands: {
       inspect: `gentlesmith v1 inspect --profile ${bundle.manifestPath}`,
-      render: `gentlesmith v1 render --profile ${bundle.manifestPath} --target ${targetName}`,
+      render: targetName
+        ? `gentlesmith v1 render --profile ${bundle.manifestPath} --target ${targetName}`
+        : `gentlesmith v1 render --profile ${bundle.manifestPath} --target <target>`,
       exportReview: `gentlesmith export --profile ${bundle.manifestPath}`,
       exportPublic: `gentlesmith export --profile ${bundle.manifestPath} --public`,
-      addTarget: `gentlesmith target add ${targetName}`,
-      bindTarget: `gentlesmith target set-profile ${targetName} ${bundle.manifestPath}`,
-      previewSync: `gentlesmith sync --target ${targetName}`,
-      applySync: `gentlesmith sync --target ${targetName} --apply`,
+      ...(targetName ? {
+        addTarget: `gentlesmith target add ${targetName}`,
+        bindTarget: `gentlesmith target set-profile ${targetName} ${bundle.manifestPath}`,
+        previewSync: `gentlesmith sync --target ${targetName}`,
+        applySync: `gentlesmith sync --target ${targetName} --apply`,
+      } : {}),
     },
   };
 }

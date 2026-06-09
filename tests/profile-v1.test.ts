@@ -98,22 +98,20 @@ describe("profile v1 manifest and artifacts", () => {
 
       const manifest = await readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8");
       expect(manifest).toContain("name: assimilated-agents");
-      expect(manifest).toContain("adapter: markdown-managed-block");
+      expect(manifest).not.toContain("adapter: markdown-managed-block");
 
       const workflow = await readFile(join(outDir, "artifacts", "workflows", "verification.md"), "utf8");
       expect(workflow).toContain("type: workflow");
       expect(workflow).toContain("privacy: private");
       expect(workflow).toContain("bun run typecheck");
 
-      const rendered = await runProfileV1Command([
-        "render",
+      const inspected = await runProfileV1Command([
+        "inspect",
         "--profile",
         join(outDir, "gentlesmith.profile.yaml"),
-        "--target",
-        "codex",
       ]);
-      expect(rendered).toContain("# Gentlesmith Profile: assimilated-agents");
-      expect(rendered).toContain("## Workflow: Verification");
+      expect(inspected).toContain("Profile: assimilated-agents");
+      expect(inspected).toContain("Targets: (none)");
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }
@@ -672,17 +670,17 @@ describe("Profile v1 application use cases", () => {
         profileName: "ui-ready-profile",
         outDir,
         wroteFiles: false,
-        targetName: "codex",
+        targetName: undefined,
       });
       expect(result.manifestPath).toBe(join(outDir, "gentlesmith.profile.yaml"));
       expect(result.nextCommands.inspect).toContain("gentlesmith v1 inspect --profile");
-      expect(result.nextCommands.render).toContain("--target codex");
+      expect(result.nextCommands.render).toContain("--target <target>");
       expect(result.nextCommands.exportReview).toContain("gentlesmith export --profile");
       expect(result.nextCommands.exportPublic).toContain("--public");
-      expect(result.nextCommands.addTarget).toBe("gentlesmith target add codex");
-      expect(result.nextCommands.bindTarget).toContain("gentlesmith target set-profile codex");
-      expect(result.nextCommands.previewSync).toBe("gentlesmith sync --target codex");
-      expect(result.nextCommands.applySync).toBe("gentlesmith sync --target codex --apply");
+      expect(result.nextCommands.addTarget).toBeUndefined();
+      expect(result.nextCommands.bindTarget).toBeUndefined();
+      expect(result.nextCommands.previewSync).toBeUndefined();
+      expect(result.nextCommands.applySync).toBeUndefined();
       expect(result.artifacts.map((artifact) => `${artifact.type}:${artifact.name}`)).toContain("workflow:verification");
       await expect(readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8")).rejects.toThrow();
     } finally {
@@ -693,8 +691,8 @@ describe("Profile v1 application use cases", () => {
 
 
 describe("import command", () => {
-  test("imports the recommended personal source from scan", async () => {
-    const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-"));
+  test("imports the recommended personal source as a neutral profile by default", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-neutral-"));
     const home = join(root, "home");
     const cwd = join(root, "workspace");
     const outDir = join(root, "draft");
@@ -711,6 +709,41 @@ describe("import command", () => {
       process.chdir(cwd);
       try {
         await withMutedConsole(() => runImport(["jarvis", "--out", outDir]));
+      } finally {
+        process.chdir(previousCwd);
+      }
+
+      const manifest = await readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8");
+      expect(manifest).toContain("name: jarvis");
+      expect(manifest).toContain("artifacts/rules/rules.md");
+      expect(manifest).not.toContain("capabilities:");
+      expect(manifest).not.toContain("targets:");
+      await expect(readFile(join(outDir, "artifacts", "context", "goal.md"), "utf8")).rejects.toThrow();
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("imports target-specific capabilities only when a target is requested", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-"));
+    const home = join(root, "home");
+    const cwd = join(root, "workspace");
+    const outDir = join(root, "draft");
+    const originalHome = process.env.HOME;
+
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n\n## Goal\n\nTemporary task.\n");
+    await Bun.write(join(home, ".codex", "config.toml"), `[mcp_servers.engram]\ncommand = "/opt/homebrew/bin/engram"\n\nnotify = ["notify-bin"]\n`);
+
+    try {
+      process.env.HOME = home;
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        await withMutedConsole(() => runImport(["jarvis", "--out", outDir, "--target", "codex"]));
       } finally {
         process.chdir(previousCwd);
       }
@@ -745,17 +778,15 @@ describe("forge Profile v1 assimilation UX", () => {
 
       const manifest = await readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8");
       expect(manifest).toContain("name: jarvis-draft");
-      expect(manifest).toContain("adapter: markdown-managed-block");
+      expect(manifest).not.toContain("adapter: markdown-managed-block");
+      expect(manifest).toContain("artifacts/context/product-direction.md");
 
-      const rendered = await runProfileV1Command([
-        "render",
+      const inspect = await runProfileV1Command([
+        "inspect",
         "--profile",
         join(outDir, "gentlesmith.profile.yaml"),
-        "--target",
-        "codex",
       ]);
-      expect(rendered).toContain("# Gentlesmith Profile: jarvis-draft");
-      expect(rendered).toContain("forge-first customization layer");
+      expect(inspect).toContain("Profile: jarvis-draft");
     } finally {
       await rm(outDir, { recursive: true, force: true });
     }

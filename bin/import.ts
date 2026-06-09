@@ -21,8 +21,8 @@ export async function runImport(args = process.argv.slice(3)): Promise<void> {
   const scan = await scanAgentSetup();
   const sourcePath = parsed.source ? resolveUserPath(parsed.source) : recommendedSourcePath(scan);
   const outDir = resolveUserPath(parsed.out ?? `.gentlesmith-v1-draft-${slugify(profileName)}`);
-  const targetName = parsed.target ?? "codex";
-  const capabilities = profileCapabilitiesForTarget(scan.capabilities, targetName);
+  const targetName = parsed.target;
+  const capabilities = targetName ? profileCapabilitiesForTarget(scan.capabilities, targetName) : [];
 
   const result = await modularizeAgentsProfile({
     sourcePath,
@@ -111,8 +111,14 @@ function renderImportResult(result: ModularizeAgentsResult): string {
     "Next:",
     `  gentlesmith v1 inspect --profile ${result.manifestPath}`,
     `  gentlesmith export --profile ${result.manifestPath}`,
-    `  gentlesmith target set-profile ${result.targetName} ${result.manifestPath}`,
-    `  gentlesmith sync --target ${result.targetName}`,
+    ...(result.targetName ? [
+      `  gentlesmith target set-profile ${result.targetName} ${result.manifestPath}`,
+      `  gentlesmith sync --target ${result.targetName}`,
+    ] : [
+      "  choose a target when you are ready to apply:",
+      `  gentlesmith target set-profile <target> ${result.manifestPath}`,
+      "  gentlesmith sync --target <target>",
+    ]),
   );
 
   return lines.join("\n");
@@ -124,7 +130,7 @@ function importSummary(result: ModularizeAgentsResult) {
     source: result.sourcePath,
     outDir: result.outDir,
     manifest: result.manifestPath,
-    target: result.targetName,
+    target: result.targetName ?? null,
     wroteFiles: result.wroteFiles,
     artifacts: result.artifacts,
     capabilities: result.capabilities,

@@ -32,7 +32,7 @@ pnpm add -g gentlesmith@beta
 # scan your local harness first
 gentlesmith scan
 
-# create a draft from the recommended scanned source
+# create a neutral draft from the recommended scanned source
 gentlesmith import jarvis
 
 # or use the guided cockpit
@@ -40,6 +40,8 @@ gentlesmith browse
 ```
 
 The first-run experience should not require memorizing a long command. `scan` is read-only: it detects personal/system instruction files, generated Gentlesmith output, project overlays, and known MCP/plugin/hook/agent capabilities before you decide what to import.
+
+By default, `import` stays target-neutral: it modularizes your source into a portable profile without choosing Codex, Claude, OpenCode, Gemini, or any other target. Pass `--target <name>` only when you intentionally want to pull target-specific detected capabilities into that draft.
 
 If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
 
@@ -52,12 +54,12 @@ gentlesmith forge --from-agents ~/.codex/AGENTS.md --out .gentlesmith-v1-draft -
 Canonical safe flow:
 
 ```bash
-gentlesmith forge --from-agents ~/.codex/AGENTS.md --out .gentlesmith-v1-draft --name jarvis-draft
-gentlesmith v1 inspect --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
-gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml
-gentlesmith export --profile .gentlesmith-v1-draft/gentlesmith.profile.yaml --public # optional share check
+gentlesmith import jarvis
+gentlesmith v1 inspect --profile .gentlesmith-v1-draft-jarvis/gentlesmith.profile.yaml
+gentlesmith export --profile .gentlesmith-v1-draft-jarvis/gentlesmith.profile.yaml
+gentlesmith export --profile .gentlesmith-v1-draft-jarvis/gentlesmith.profile.yaml --public # optional share check
 gentlesmith target add codex                                                     # if needed
-gentlesmith target set-profile codex .gentlesmith-v1-draft/gentlesmith.profile.yaml
+gentlesmith target set-profile codex .gentlesmith-v1-draft-jarvis/gentlesmith.profile.yaml
 gentlesmith sync --target codex                                                  # preview only
 gentlesmith sync --target codex --apply                                          # write after review
 gentlesmith status                                                               # verify bindings

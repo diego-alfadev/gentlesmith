@@ -19,8 +19,10 @@ import { runForge } from "../bin/forge";
 import { runImport } from "../bin/import";
 import { modularizeAgentsProfile } from "../src/application/modularize-agents";
 import { assertImportableSource } from "../src/application/import-source";
+import { buildCleanupPlan, buildScanBrief } from "../src/application/coach-cleanup";
 import { scanAgentSetup } from "../src/application/scan-setup";
 import { renderScanResult } from "../bin/scan";
+import { renderCleanupPlan } from "../bin/coach";
 
 const fixtures = join(import.meta.dir, "fixtures", "profile-v1");
 
@@ -714,6 +716,39 @@ describe("setup scan", () => {
         note: "Choose a source manually because no safe personal/system source was selected.",
       });
       expect(renderScanResult(result)).toContain("gentlesmith browse");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("coach cleanup", () => {
+  test("builds a deterministic cleanup plan from scan state", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-coach-"));
+    const home = join(root, "home");
+    const cwd = join(root, "workspace");
+    await mkdir(join(home, ".codex"), { recursive: true });
+    await mkdir(join(home, ".claude"), { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    await Bun.write(join(home, ".codex", "AGENTS.md"), "## Rules\n\nAlways verify.\n");
+    await Bun.write(join(home, ".claude", "CLAUDE.md"), "<!-- fragment: rules/safety.md (repo) -->\n\n## Rules\n\nGenerated.\n");
+    await Bun.write(join(home, ".codex", "config.toml"), `[mcp_servers.engram]\ncommand = "engram"\n\nnotify = ["notify-bin"]\n`);
+
+    try {
+      const scan = await scanAgentSetup({ cwd, homeDir: home });
+      const brief = buildScanBrief(scan);
+      const plan = buildCleanupPlan(scan);
+      const rendered = renderCleanupPlan(plan);
+
+      expect(brief.sources).toMatchObject({ personal: 1, generated: 1 });
+      expect(brief.recommendedSource?.path).toBe(join(home, ".codex", "AGENTS.md"));
+      expect(plan.findings).toContain("2 instruction source(s) found: 1 personal, 1 generated, 0 project overlay(s).");
+      expect(plan.recommendedActions).toContain("Draft a target-neutral profile from the recommended personal/system source.");
+      expect(plan.suggestedCommands).toContain("gentlesmith import jarvis");
+      expect(plan.risks).toContain("Generated outputs may contain stale or already-rendered instructions; importing them can duplicate or fossilize behavior.");
+      expect(rendered).toContain("gentlesmith — coach cleanup");
+      expect(rendered).toContain("Agent handoff:");
+      expect(renderCleanupPlan(plan, { includePrompt: true })).toContain("Act as a Gentlesmith profile architect.");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

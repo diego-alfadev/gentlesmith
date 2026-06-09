@@ -696,6 +696,38 @@ describe("Profile v1 application use cases", () => {
 
 
 describe("import command", () => {
+  test("refuses generated agent output as an import source unless forced", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-generated-"));
+    const home = join(root, "home");
+    const cwd = join(root, "workspace");
+    const source = join(cwd, "AGENTS.md");
+    const outDir = join(root, "draft");
+    const originalHome = process.env.HOME;
+
+    await mkdir(cwd, { recursive: true });
+    await Bun.write(source, "<!-- gentle-ai-overlay:gentlesmith -->\n\n## Rules\n\nRendered output.\n");
+
+    try {
+      process.env.HOME = home;
+      const previousCwd = process.cwd();
+      process.chdir(cwd);
+      try {
+        await expect(withMutedConsole(() => runImport(["jarvis", "--source", source, "--out", outDir])))
+          .rejects.toThrow("Refusing to import generated agent output");
+        await withMutedConsole(() => runImport(["jarvis", "--source", source, "--out", outDir, "--force"]));
+      } finally {
+        process.chdir(previousCwd);
+      }
+
+      const manifest = await readFile(join(outDir, "gentlesmith.profile.yaml"), "utf8");
+      expect(manifest).toContain("name: jarvis");
+    } finally {
+      if (originalHome === undefined) delete process.env.HOME;
+      else process.env.HOME = originalHome;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("imports the recommended personal source as a neutral profile by default", async () => {
     const root = await mkdtemp(join(tmpdir(), "gentlesmith-import-neutral-"));
     const home = join(root, "home");

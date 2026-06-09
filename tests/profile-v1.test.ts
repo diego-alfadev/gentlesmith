@@ -634,6 +634,8 @@ describe("setup scan", () => {
       expect(byPath.get(join(home, ".codex", "AGENTS.md"))?.kind).toBe("personal-system");
       expect(byPath.get(join(home, ".codex", "AGENTS.md"))?.recommended).toBe(true);
       expect(byPath.get(join(home, ".codex", "AGENTS.md"))?.sections.exclude).toBe(1);
+      expect(byPath.get(join(home, ".gemini", "GEMINI.md"))?.kind).toBe("personal-system");
+      expect(byPath.get(join(home, ".gemini", "GEMINI.md"))?.recommended).toBe(false);
       expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.kind).toBe("generated");
       expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.recommended).toBe(false);
       expect(byPath.get(join(home, ".claude", "CLAUDE.md"))?.sections.import).toBe(0);

@@ -101,10 +101,24 @@ export async function scanAgentSetup(input: ScanSetupInput = {}): Promise<ScanSe
     }
   }
 
+  const rankedCandidates = markRecommendedSource(candidates);
   const capabilityResult = await detectCapabilities({ cwd, homeDir });
   warnings.push(...capabilityResult.warnings);
 
-  return { cwd, homeDir, candidates, capabilities: capabilityResult.capabilities, warnings };
+  return { cwd, homeDir, candidates: rankedCandidates, capabilities: capabilityResult.capabilities, warnings };
+}
+
+function markRecommendedSource(candidates: SourceCandidate[]): SourceCandidate[] {
+  const recommended = candidates.find((candidate) =>
+    candidate.kind === "personal-system" &&
+    candidate.confidence === "high" &&
+    candidate.sections.import > 0
+  );
+
+  return candidates.map((candidate) => ({
+    ...candidate,
+    recommended: Boolean(recommended && candidate.path === recommended.path),
+  }));
 }
 
 function classifySource(path: string, source: string, roots: { cwd: string; homeDir: string }): SourceCandidate {
@@ -147,7 +161,7 @@ function classifySource(path: string, source: string, roots: { cwd: string; home
       path,
       kind: "personal-system",
       confidence: "high",
-      recommended: true,
+      recommended: false,
       reason: "known global agent instructions location",
       notes: catalog.skipped.length > 0 ? ["Some transient-looking sections would be excluded by default."] : [],
       sections: countSections(sections),

@@ -5,6 +5,21 @@ import { join } from "node:path";
 import { BLOCK_END, BLOCK_START } from "../bin/runtime";
 
 describe("status CLI", () => {
+  test("help surfaces the scan and neutral import first-run path", () => {
+    const result = Bun.spawnSync({
+      cmd: ["bun", "run", "bin/distribute.ts", "--help"],
+      cwd: join(import.meta.dir, ".."),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    expect(result.exitCode).toBe(0);
+    const out = result.stdout.toString();
+    expect(out).toContain("gentlesmith scan");
+    expect(out).toContain("gentlesmith import jarvis");
+    expect(out).toContain("draft a neutral modular profile");
+  });
+
   test("guides empty installs toward scan and neutral import", async () => {
     const root = await mkdtemp(join(tmpdir(), "gentlesmith-status-empty-"));
     try {

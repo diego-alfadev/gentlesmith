@@ -731,10 +731,10 @@ function printUsage(): void {
   console.log(`gentlesmith — forge, review, and switch AI-agent profiles
 
 Recommended flow:
-  gentlesmith forge debugger                 guided interview + reviewable draft bundle
-  gentlesmith export --profile debugger       review/share the profile package
-  gentlesmith apply debugger                 preview the profile switch
-  gentlesmith apply debugger --apply         write the switch
+  gentlesmith scan                            inspect local agent harness sources
+  gentlesmith import jarvis                   draft a neutral modular profile
+  gentlesmith export --profile <draft>        review/share the profile package
+  gentlesmith sync --target <target>          preview a target render
 
 Primary:
   gentlesmith forge [name]       guided interview + reviewable profile draft

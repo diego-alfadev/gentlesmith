@@ -733,6 +733,7 @@ function printUsage(): void {
 Recommended flow:
   gentlesmith scan                            inspect local agent harness sources
   gentlesmith coach cleanup                   plan a safe harness cleanup
+  gentlesmith coach cleanup --engine codex    ask an installed agent for a proposal
   gentlesmith import jarvis                   draft a neutral modular profile
   gentlesmith export --profile <draft>        review/share the profile package
   gentlesmith sync --target <target>          preview a target render
@@ -745,6 +746,7 @@ Primary:
   gentlesmith status             show agent/profile bindings and sync state
   gentlesmith scan               detect importable agent instruction sources
   gentlesmith coach cleanup      plan source/capability cleanup from scan
+  gentlesmith coach cleanup --engines         list supported local engines
   gentlesmith import [name]      create a draft from the safest scanned source
   gentlesmith browse             guided cockpit for forge/review/export/apply
 

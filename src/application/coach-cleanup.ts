@@ -1,4 +1,10 @@
 import type { CapabilityCandidate, ScanSetupResult, SourceCandidate } from "./scan-setup";
+import {
+  generateAgentProposal,
+  type AgentProposal,
+  type GenerationEngine,
+  type GenerationOptions,
+} from "./generation-engine";
 
 export interface ScanBrief {
   sources: {
@@ -41,6 +47,11 @@ export interface CleanupPlan {
   suggestedCommands: string[];
   risks: string[];
   agentHandoffPrompt: string;
+}
+
+export interface CleanupCoachResult {
+  plan: CleanupPlan;
+  proposal: AgentProposal;
 }
 
 export function buildScanBrief(scan: ScanSetupResult): ScanBrief {
@@ -90,6 +101,16 @@ export function buildCleanupPlan(scan: ScanSetupResult): CleanupPlan {
     risks,
     agentHandoffPrompt: buildAgentHandoffPrompt(brief),
   };
+}
+
+export async function runCleanupCoach(
+  scan: ScanSetupResult,
+  engine: GenerationEngine,
+  options: GenerationOptions = {},
+): Promise<CleanupCoachResult> {
+  const plan = buildCleanupPlan(scan);
+  const proposal = await generateAgentProposal(plan.agentHandoffPrompt, engine, options);
+  return { plan, proposal };
 }
 
 function sourceSummary(candidate: SourceCandidate): { path: string; importableSections: number } {
@@ -200,10 +221,12 @@ function buildAgentHandoffPrompt(brief: ScanBrief): string {
   return [
     "Act as a Gentlesmith profile architect.",
     "Use this scan brief to help clean and unify an AI-agent harness without losing agent-specific capabilities.",
+    "Operate in read-only proposal mode. Do not create, edit, move, or delete files, and do not run mutating commands.",
+    "Base the proposal on this supplied brief; ask for missing evidence instead of changing the environment.",
     brief.recommendedSource ? `Starter source: ${brief.recommendedSource.path}` : "No starter source was selected automatically.",
     `Alternate personal sources: ${brief.alternatePersonalSources.map((source) => source.path).join(", ") || "none"}.`,
     `Generated outputs to avoid as source of truth: ${brief.generatedOutputs.map((source) => source.path).join(", ") || "none"}.`,
     `Capabilities by target: ${brief.capabilitiesByTarget.map((target) => `${target.target}:${target.total}`).join(", ") || "none"}.`,
-    "Return a conservative cleanup plan with source-of-truth, fragments to create, capabilities to keep private, and first safe commands.",
+    "Return a conservative cleanup proposal with source-of-truth, fragments to create, capabilities to keep private, and first safe commands.",
   ].join("\n");
 }

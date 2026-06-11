@@ -35,6 +35,9 @@ gentlesmith scan
 # get a cleanup plan for your current agent setup
 gentlesmith coach cleanup
 
+# ask one of your installed agents to turn that scan into a proposal
+gentlesmith coach cleanup --engine codex
+
 # create a neutral draft from the recommended scanned source
 gentlesmith import jarvis
 
@@ -48,7 +51,17 @@ By default, `import` stays target-neutral: it modularizes your source into a por
 
 When multiple personal/system instruction files exist, Gentlesmith does not treat any agent as the canonical master. `scan` ranks one safe starter source for convenience, but you can import any source explicitly with `gentlesmith import jarvis --source <path>`.
 
-Use `gentlesmith coach cleanup` when you want a readable cleanup plan before importing. It summarizes source-of-truth candidates, generated outputs to avoid, target-specific capabilities, risks, and next commands. Add `--prompt` to print a handoff prompt for your preferred agent, or `--out cleanup.md` to write a reviewable handoff file.
+Use `gentlesmith coach cleanup` when you want a readable cleanup plan before importing. It summarizes source-of-truth candidates, generated outputs to avoid, target-specific capabilities, risks, and next commands. Add `--prompt` to print a handoff prompt, or `--out cleanup.md` to write a reviewable handoff file.
+
+Gentlesmith can also invoke an installed agent as its generation engine:
+
+```bash
+gentlesmith coach cleanup --engines
+gentlesmith coach cleanup --engine codex
+gentlesmith coach cleanup --engine claude --out cleanup-proposal.md
+```
+
+Supported engines are Codex, Claude Code, Gemini CLI, and OpenCode. The engine receives the deterministic scan brief and returns a proposal only; Gentlesmith does not apply profile changes. Codex, Claude Code, and Gemini CLI are launched in read-only/plan modes. OpenCode is currently protected by the read-only prompt and its normal permission policy because its CLI does not expose an equivalent plan-mode flag.
 
 If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
 

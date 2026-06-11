@@ -17,17 +17,17 @@ const ENGINE_DEFINITIONS: Record<EngineId, EngineDefinition> = {
   codex: {
     label: "Codex",
     command: "codex",
-    args: (prompt) => ["exec", prompt],
+    args: (prompt) => ["exec", "--sandbox", "read-only", "--ephemeral", prompt],
   },
   claude: {
     label: "Claude Code",
     command: "claude",
-    args: (prompt) => ["--print", "-p", prompt],
+    args: (prompt) => ["--permission-mode", "plan", "--no-session-persistence", "--print", "-p", prompt],
   },
   gemini: {
     label: "Gemini CLI",
     command: "gemini",
-    args: (prompt) => ["-p", prompt],
+    args: (prompt) => ["--approval-mode", "plan", "-p", prompt],
   },
   opencode: {
     label: "OpenCode",

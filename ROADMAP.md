@@ -113,6 +113,11 @@ Strategic rule: first model capabilities as first-class profile resources, then 
 - [x] Detect existing agent instruction configs plus MCP/plugin/hook/agent capability hints.
 - [ ] Detect active profiles, installed skills, and known toolchain integrations.
 - [x] Generate scan review with clear sections: importable behavior, generated sources, project overlays, duplicate sources, and excluded transient sections.
+- [x] Add a goal-driven assessment interview before agent inference.
+- [x] Write scan evidence, exact prompt, proposal, and run metadata into an isolated review bundle.
+- [x] Keep additional profile suggestions opt-in instead of inferring unwanted scenarios.
+- [x] Allow explicit engine/model selection and record generation duration without fabricating token counts.
+- [ ] Parse assessment proposals into a validated structure for human-vs-agent comparison.
 - [ ] Generate a reviewable profile draft with detected capabilities wired into Profile v1, unresolved gaps, and private/local assumptions.
 - [ ] Keep scan output safe by default: never persist secret values, only references such as `${env:KEY}`.
 - [x] Add a short success path: `scan` → `import jarvis`.

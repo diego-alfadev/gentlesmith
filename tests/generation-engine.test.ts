@@ -80,7 +80,7 @@ describe("CLI generation engine adapters", () => {
   test("builds argv without shell interpolation", () => {
     expect(buildEngineCommand("codex", "audit me")).toEqual({
       command: "codex",
-      args: ["exec", "--sandbox", "read-only", "--ephemeral", "audit me"],
+      args: ["exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", "audit me"],
     });
     expect(buildEngineCommand("claude", "audit me")).toEqual({
       command: "claude",

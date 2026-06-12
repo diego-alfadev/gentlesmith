@@ -17,7 +17,7 @@ const ENGINE_DEFINITIONS: Record<EngineId, EngineDefinition> = {
   codex: {
     label: "Codex",
     command: "codex",
-    args: (prompt) => ["exec", "--sandbox", "read-only", "--ephemeral", prompt],
+    args: (prompt) => ["exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", prompt],
   },
   claude: {
     label: "Claude Code",

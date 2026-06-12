@@ -16,3 +16,4 @@ presets/local-*.yaml
 # Local generated Profile v1 drafts and smoke artifacts.
 .gentlesmith-v1-draft*/
 .gentlesmith-smoke*/
+.gentlesmith-assessments/

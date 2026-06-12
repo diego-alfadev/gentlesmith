@@ -38,6 +38,9 @@ gentlesmith coach cleanup
 # ask one of your installed agents to turn that scan into a proposal
 gentlesmith coach cleanup --engine codex
 
+# interview the user and write an isolated assessment bundle
+gentlesmith coach assess
+
 # create a neutral draft from the recommended scanned source
 gentlesmith import jarvis
 
@@ -62,6 +65,17 @@ gentlesmith coach cleanup --engine claude --out cleanup-proposal.md
 ```
 
 Supported engines are Codex, Claude Code, Gemini CLI, and OpenCode. The engine receives the deterministic scan brief and returns a proposal only; Gentlesmith does not apply profile changes. Codex, Claude Code, and Gemini CLI are launched in read-only/plan modes. OpenCode is currently protected by the read-only prompt and its normal permission policy because its CLI does not expose an equivalent plan-mode flag.
+
+For a goal-directed review, use `gentlesmith coach assess`. It asks what you believe exists, what outcome you want, what must be preserved, and whether profile suggestions are actually useful. The scan, exact prompt, proposal, and run metadata are written into a new `.gentlesmith-assessments/<timestamp>/` bundle. Nothing is applied to the live harness.
+
+Choose an engine or model when cost/quality matters:
+
+```bash
+gentlesmith coach assess --engine codex
+gentlesmith coach assess --engine codex --model <model>
+```
+
+Duration is recorded for every engine. Token counts remain optional metadata because installed-agent CLIs expose usage inconsistently; Gentlesmith does not fabricate estimates.
 
 If you already know which personal agent instructions file you want to modularize, you can use the lower-level command directly:
 

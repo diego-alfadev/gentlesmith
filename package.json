@@ -1,6 +1,6 @@
 {
   "name": "gentlesmith",
-  "version": "0.3.0-beta.14",
+  "version": "0.4.0-beta.0",
   "description": "Compose reusable prompt fragments into local AI-agent config overlays. Standalone or as a gentle-ai customization layer.",
   "type": "module",
   "bin": {

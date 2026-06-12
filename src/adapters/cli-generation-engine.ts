@@ -10,29 +10,51 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 interface EngineDefinition {
   label: string;
   command: string;
-  args(prompt: string): string[];
+  args(prompt: string, options?: GenerationOptions): string[];
 }
 
 const ENGINE_DEFINITIONS: Record<EngineId, EngineDefinition> = {
   codex: {
     label: "Codex",
     command: "codex",
-    args: (prompt) => ["exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check", prompt],
+    args: (prompt, options) => [
+      "exec",
+      "--sandbox",
+      "read-only",
+      "--ephemeral",
+      "--skip-git-repo-check",
+      ...(options?.model ? ["--model", options.model] : []),
+      prompt,
+    ],
   },
   claude: {
     label: "Claude Code",
     command: "claude",
-    args: (prompt) => ["--permission-mode", "plan", "--no-session-persistence", "--print", "-p", prompt],
+    args: (prompt, options) => [
+      "--permission-mode",
+      "plan",
+      "--no-session-persistence",
+      ...(options?.model ? ["--model", options.model] : []),
+      "--print",
+      "-p",
+      prompt,
+    ],
   },
   gemini: {
     label: "Gemini CLI",
     command: "gemini",
-    args: (prompt) => ["--approval-mode", "plan", "-p", prompt],
+    args: (prompt, options) => [
+      "--approval-mode",
+      "plan",
+      ...(options?.model ? ["--model", options.model] : []),
+      "-p",
+      prompt,
+    ],
   },
   opencode: {
     label: "OpenCode",
     command: "opencode",
-    args: (prompt) => ["run", prompt],
+    args: (prompt, options) => ["run", ...(options?.model ? ["--model", options.model] : []), prompt],
   },
 };
 
@@ -45,11 +67,15 @@ export function isEngineId(value: string): value is EngineId {
   return ENGINE_IDS.includes(value as EngineId);
 }
 
-export function buildEngineCommand(id: EngineId, prompt: string): EngineCommand {
+export function buildEngineCommand(
+  id: EngineId,
+  prompt: string,
+  options: GenerationOptions = {},
+): EngineCommand {
   const definition = ENGINE_DEFINITIONS[id];
   return {
     command: definition.command,
-    args: definition.args(prompt),
+    args: definition.args(prompt, options),
   };
 }
 
@@ -60,7 +86,7 @@ export function createCliGenerationEngine(id: EngineId): GenerationEngine {
     id,
     label: definition.label,
     available: () => Bun.which(definition.command) !== null,
-    generate: (prompt, options) => runEngineCommand(buildEngineCommand(id, prompt), options),
+    generate: (prompt, options) => runEngineCommand(buildEngineCommand(id, prompt, options), options),
   };
 }
 

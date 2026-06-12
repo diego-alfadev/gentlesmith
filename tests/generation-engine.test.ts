@@ -21,6 +21,9 @@ describe("generation engine port", () => {
     await expect(generateAgentProposal("clean this harness", engine)).resolves.toEqual({
       engine: "codex",
       content: "Proposal for: clean this harness",
+      metrics: {
+        durationMs: expect.any(Number),
+      },
     });
   });
 
@@ -70,6 +73,9 @@ describe("generation engine port", () => {
     expect(result.proposal).toEqual({
       engine: "opencode",
       content: "Keep Codex as a starter source, then compare Gemini rules.",
+      metrics: {
+        durationMs: expect.any(Number),
+      },
     });
     expect(prompts[0]).toContain("Act as a Gentlesmith profile architect.");
     expect(prompts[0]).toContain("Operate in read-only proposal mode.");
@@ -93,6 +99,19 @@ describe("CLI generation engine adapters", () => {
     expect(buildEngineCommand("opencode", "audit me")).toEqual({
       command: "opencode",
       args: ["run", "audit me"],
+    });
+    expect(buildEngineCommand("codex", "audit me", { model: "gpt-5.4-mini" })).toEqual({
+      command: "codex",
+      args: [
+        "exec",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--model",
+        "gpt-5.4-mini",
+        "audit me",
+      ],
     });
   });
 
